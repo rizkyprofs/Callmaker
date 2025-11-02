@@ -1,50 +1,53 @@
-// models/Signal.js - COMPLETE FIX
-import { DataTypes } from "sequelize";
-import sequelize from "../config/db.js";
+// models/Signal.js - UPDATED VERSION
+import { DataTypes } from 'sequelize';
+import sequelize from '../config/db.js';
+import User from './User.js';
 
-const Signal = sequelize.define("Signal", {
-  id: { 
-    type: DataTypes.INTEGER, 
-    autoIncrement: true, 
-    primaryKey: true 
+const Signal = sequelize.define('Signal', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
   },
-  coin_name: { 
-    type: DataTypes.STRING(50), 
-    allowNull: false 
+  userId: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'Users',
+      key: 'id',
+    },
   },
-  entry_price: { 
-    type: DataTypes.FLOAT, 
-    allowNull: false 
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
   },
-  target_price: { 
-    type: DataTypes.FLOAT, 
-    allowNull: false 
+  symbol: {
+    type: DataTypes.STRING,
+    allowNull: false,
   },
-  stop_loss: { 
-    type: DataTypes.FLOAT, 
-    allowNull: false 
+  action: {
+    type: DataTypes.ENUM('BUY', 'SELL', 'HOLD'),
+    allowNull: false,
   },
-  note: { 
-    type: DataTypes.TEXT, 
-    allowNull: true 
+  price: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
   },
-  chart_image: { 
-    type: DataTypes.STRING(255), 
-    allowNull: true 
+  status: {
+    type: DataTypes.ENUM('pending', 'approved', 'rejected'),
+    defaultValue: 'pending',
   },
-  status: { 
-    type: DataTypes.ENUM("pending", "approved", "rejected"), 
-    defaultValue: "pending" 
+  createdAt: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW,
   },
-  created_by: { 
-    type: DataTypes.INTEGER, 
-    allowNull: true 
-  }
+  updatedAt: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW,
+  },
 }, {
   tableName: 'signals',
   timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: false
 });
 
 export default Signal;

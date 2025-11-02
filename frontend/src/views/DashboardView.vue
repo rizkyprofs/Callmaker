@@ -1,360 +1,523 @@
-<!-- src/views/DashboardView.vue - COMPLETE VERSION -->
+<!-- client/src/views/DashboardView.vue - FIXED VERSION -->
 <template>
-  <div style="padding: 20px; max-width: 1200px; margin: 0 auto;">
-    <!-- Header -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #ddd;">
-      <h1>Callmaker Dashboard</h1>
-      <div style="display: flex; align-items: center; gap: 15px;">
-        <span>Hello, {{ user?.username }}</span>
-        <span style="background: #007bff; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px;">
-          {{ user?.role }}
-        </span>
-        <button @click="logout" style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 5px;">
-          Logout
-        </button>
-      </div>
-    </div>
-
-    <!-- Admin Notification -->
-    <div v-if="user?.role === 'admin' && pendingCount > 0" style="background: #fff3cd; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-      <strong>📢 Admin Alert:</strong> You have {{ pendingCount }} signals waiting for approval
-    </div>
-
-    <!-- Signal Form untuk Callmaker & Admin -->
-    <div v-if="['callmaker', 'admin'].includes(user?.role)" style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #ddd;">
-      <h3>📈 Submit New Signal</h3>
-      <form @submit.prevent="submitSignal" style="display: flex; flex-direction: column; gap: 15px;">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-          <input v-model="newSignal.coin_name" placeholder="Coin (e.g., BTC/USDT)" required style="padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-          <input v-model="newSignal.entry_price" type="number" step="0.0001" placeholder="Entry Price" required style="padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-          <input v-model="newSignal.target_price" type="number" step="0.0001" placeholder="Target Price" required style="padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-          <input v-model="newSignal.stop_loss" type="number" step="0.0001" placeholder="Stop Loss" required style="padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-        </div>
-        <textarea v-model="newSignal.note" placeholder="Analysis note..." style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; min-height: 80px;"></textarea>
-        <button type="submit" :disabled="loading" style="background: #007bff; color: white; padding: 12px; border: none; border-radius: 5px;">
-          {{ loading ? 'Submitting...' : (user?.role === 'admin' ? 'Publish Signal' : 'Submit for Approval') }}
-        </button>
-      </form>
-    </div>
-
-    <!-- Signals List -->
-    <div>
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h2>📊 Trading Signals</h2>
-        <select v-model="statusFilter" @change="fetchSignals" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
-          <option value="all">All Signals</option>
-          <option value="pending" v-if="user?.role !== 'user'">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="rejected" v-if="user?.role !== 'user'">Rejected</option>
-        </select>
-      </div>
-
-      <!-- Loading -->
-      <div v-if="loading" style="text-align: center; padding: 40px;">
-        Loading signals...
-      </div>
-
-      <!-- Signals Grid -->
-      <div v-else style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
-        <div v-for="signal in filteredSignals" :key="signal.id" style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #ddd; border-left: 4px solid #007bff;">
-          <!-- Signal Header -->
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-            <h3 style="margin: 0;">{{ signal.coin_name }}</h3>
-            <span :style="{
-              padding: '3px 10px',
-              borderRadius: '12px',
-              fontSize: '10px',
-              fontWeight: 'bold',
-              background: signal.status === 'approved' ? '#d4edda' : signal.status === 'pending' ? '#fff3cd' : '#f8d7da',
-              color: signal.status === 'approved' ? '#155724' : signal.status === 'pending' ? '#856404' : '#721c24'
-            }">
-              {{ signal.status }}
-            </span>
-          </div>
-          
-          <!-- Prices -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 15px;">
-            <div style="text-align: center;">
-              <div style="font-size: 12px; color: #666;">Entry</div>
-              <strong>${{ signal.entry_price }}</strong>
-            </div>
-            <div style="text-align: center;">
-              <div style="font-size: 12px; color: #666;">Target</div>
-              <strong style="color: #28a745;">${{ signal.target_price }}</strong>
-            </div>
-            <div style="text-align: center;">
-              <div style="font-size: 12px; color: #666;">Stop Loss</div>
-              <strong style="color: #dc3545;">${{ signal.stop_loss }}</strong>
-            </div>
-          </div>
-
-          <!-- Note -->
-          <div v-if="signal.note" style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
-            <p style="margin: 0; font-size: 14px;">{{ signal.note }}</p>
-          </div>
-
-          <!-- Footer -->
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
-            <div style="font-size: 12px; color: #666;">
-              <div>By: {{ signal.creator?.username }}</div>
-              <div>{{ formatDate(signal.created_at) }}</div>
-            </div>
-            
-            <!-- Actions -->
-            <div style="display: flex; gap: 5px;">
-              <!-- Admin Actions -->
-              <button 
-                v-if="user?.role === 'admin' && signal.status === 'pending'"
-                @click="updateSignalStatus(signal.id, 'approved')"
-                style="background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 3px; font-size: 12px;"
-              >
-                Approve
-              </button>
-              <button 
-                v-if="user?.role === 'admin' && signal.status === 'pending'"
-                @click="updateSignalStatus(signal.id, 'rejected')"
-                style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; font-size: 12px;"
-              >
-                Reject
-              </button>
-              
-              <!-- Delete Button (Admin atau Creator) -->
-              <button 
-                v-if="user?.role === 'admin' || signal.created_by === user?.id"
-                @click="deleteSignal(signal.id)"
-                style="background: #6c757d; color: white; border: none; padding: 5px 10px; border-radius: 3px; font-size: 12px;"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
+  <div class="dashboard">
+    <div class="container">
+      <!-- Header -->
+      <div class="dashboard-header">
+        <h1>Dashboard</h1>
+        <div class="user-info" v-if="user">
+          <span>Welcome, {{ user.name }} ({{ user.role }})</span>
+          <button @click="handleLogout" class="logout-btn">Logout</button>
         </div>
       </div>
 
-      <!-- Empty State -->
-      <div v-if="!loading && signals.length === 0" style="text-align: center; padding: 40px; color: #666;">
-        No signals found
+      <!-- Stats Cards -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <h3>Total Signals</h3>
+          <p class="stat-number">{{ signals.length }}</p>
+        </div>
+        <div class="stat-card">
+          <h3>Pending Signals</h3>
+          <p class="stat-number">{{ pendingCount }}</p>
+        </div>
+        <div class="stat-card">
+          <h3>Approved Signals</h3>
+          <p class="stat-number">{{ approvedCount }}</p>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div v-if="loading" class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading dashboard data...</p>
+      </div>
+
+      <!-- Error State -->
+      <div v-else-if="error" class="error-state">
+        <p>❌ {{ error }}</p>
+        <button @click="retryLoading" class="retry-btn">Retry</button>
+      </div>
+
+      <!-- Signals Table -->
+      <div v-else class="signals-section">
+        <div class="section-header">
+          <h2>Your Signals</h2>
+          <button @click="refreshData" class="refresh-btn">🔄 Refresh</button>
+        </div>
+        
+        <div v-if="signals.length === 0" class="no-signals">
+          <p>No signals found. Create your first signal!</p>
+        </div>
+        
+        <div v-else class="signals-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Symbol</th>
+                <th>Action</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="signal in signals" :key="signal.id">
+                <td>{{ signal.name }}</td>
+                <td><strong>{{ signal.symbol }}</strong></td>
+                <td :class="signal.action.toLowerCase()">{{ signal.action }}</td>
+                <td>${{ signal.price }}</td>
+                <td :class="signal.status">
+                  <span class="status-badge">{{ signal.status }}</span>
+                </td>
+                <td>{{ formatDate(signal.createdAt) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
 const user = ref(null)
 const signals = ref([])
-const loading = ref(false)
 const pendingCount = ref(0)
-const statusFilter = ref('all')
-const newSignal = ref({
-  coin_name: '',
-  entry_price: '',
-  target_price: '',
-  stop_loss: '',
-  note: ''
+const loading = ref(true)
+const error = ref(null)
+
+// Computed values
+const approvedCount = computed(() => {
+  return signals.value.filter(signal => signal.status === 'approved').length
 })
 
-// Filter signals berdasarkan status
-const filteredSignals = computed(() => {
-  if (statusFilter.value === 'all') return signals.value
-  return signals.value.filter(signal => signal.status === statusFilter.value)
-})
-
-// Fetch signals dari backend
-const fetchSignals = async () => {
-  try {
-    loading.value = true
-    const token = localStorage.getItem('token')
-    
-    const response = await fetch('http://localhost:5000/api/signals', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (!response.ok) throw new Error('Failed to fetch signals')
-    
-    signals.value = await response.json()
-  } catch (error) {
-    console.error('Error fetching signals:', error)
-    alert('Failed to load signals')
-  } finally {
-    loading.value = false
-  }
-}
-
-// Fetch pending count untuk admin
-const fetchPendingCount = async () => {
-  if (user.value?.role === 'admin') {
-    try {
-      const token = localStorage.getItem('token')
-      const response = await fetch('http://localhost:5000/api/signals/pending/count', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        pendingCount.value = data.count
-      }
-    } catch (error) {
-      console.error('Error fetching pending count:', error)
-    }
-  }
-}
-
-// Submit new signal
-const submitSignal = async () => {
-  try {
-    loading.value = true
-    const token = localStorage.getItem('token')
-    
-    const response = await fetch('http://localhost:5000/api/signals', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(newSignal.value)
-    })
-    
-    const data = await response.json()
-    
-    if (!response.ok) throw new Error(data.message)
-    
-    alert(data.message)
-    // Reset form
-    newSignal.value = { coin_name: '', entry_price: '', target_price: '', stop_loss: '', note: '' }
-    // Refresh signals
-    fetchSignals()
-    fetchPendingCount()
-  } catch (error) {
-    console.error('Error creating signal:', error)
-    alert(error.message || 'Failed to create signal')
-  } finally {
-    loading.value = false
-  }
-}
-
-// Update signal status (admin only)
-const updateSignalStatus = async (signalId, status) => {
-  if (!confirm(`Are you sure you want to ${status} this signal?`)) return
-  
-  try {
-    const token = localStorage.getItem('token')
-    
-    const response = await fetch(`http://localhost:5000/api/signals/${signalId}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ status })
-    })
-    
-    const data = await response.json()
-    
-    if (!response.ok) throw new Error(data.message)
-    
-    alert(`Signal ${status}`)
-    fetchSignals()
-    fetchPendingCount()
-  } catch (error) {
-    console.error('Error updating signal:', error)
-    alert(error.message || 'Failed to update signal')
-  }
-}
-
-// Delete signal
-const deleteSignal = async (signalId) => {
-  if (!confirm('Are you sure you want to delete this signal?')) return
-  
-  try {
-    const token = localStorage.getItem('token')
-    
-    const response = await fetch(`http://localhost:5000/api/signals/${signalId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    })
-    
-    if (!response.ok) throw new Error('Failed to delete signal')
-    
-    alert('Signal deleted')
-    fetchSignals()
-    fetchPendingCount()
-  } catch (error) {
-    console.error('Error deleting signal:', error)
-    alert(error.message || 'Failed to delete signal')
-  }
-}
-
-// Helper function
+// Format date
 const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+    day: 'numeric'
   })
 }
 
-const logout = async () => {
-  console.log('🔄 Logging out...')
-  
-  // Clear localStorage
-  localStorage.removeItem('token')
-  localStorage.removeItem('user')
-  
-  // Clear state
-  user.value = null
-  signals.value = []
-  
-  // Force redirect to login
-  console.log('➡️ Redirecting to login...')
-  window.location.href = '/login'  // ⚠️ PAKAI INI untuk force redirect
+// Fetch user data dari database
+const fetchUserData = async () => {
+  try {
+    const token = localStorage.getItem('token')
+    if (!token) {
+      throw new Error('No authentication token found')
+    }
+
+    const response = await fetch('http://localhost:5000/api/user', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        // Token invalid
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        throw new Error('Session expired. Please login again.')
+      }
+      throw new Error(`Failed to fetch user data: ${response.status}`)
+    }
+
+    const userData = await response.json()
+    return userData
+  } catch (err) {
+    console.error('Error fetching user data:', err)
+    throw err
+  }
 }
 
-// DI: src/views/DashboardView.vue - GANTI onMounted dengan:
-
-onMounted(async () => {
+// Fetch signals dari database
+const fetchSignals = async () => {
   try {
-    // Get user data dengan error handling
-    const userData = localStorage.getItem('user')
-    console.log('Raw user data:', userData) // Debug
-    
-    if (userData && userData !== 'null' && userData !== 'undefined') {
-      try {
-        user.value = JSON.parse(userData)
-      } catch (parseError) {
-        console.error('Error parsing user data:', parseError)
-        // Clear corrupt data
-        localStorage.removeItem('user')
-        // Redirect to login
-        router.push('/login')
-        return
+    const token = localStorage.getItem('token')
+    if (!token) return
+
+    const response = await fetch('http://localhost:5000/api/signals/user', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
       }
+    })
+
+    if (response.ok) {
+      const signalsData = await response.json()
+      signals.value = signalsData
     } else {
-      // No user data, redirect to login
+      console.warn('Failed to fetch signals:', response.status)
+      signals.value = []
+    }
+  } catch (err) {
+    console.error('Error fetching signals:', err)
+    signals.value = []
+  }
+}
+
+// Fetch pending count
+const fetchPendingCount = async () => {
+  try {
+    const token = localStorage.getItem('token')
+    if (!token) return
+
+    const response = await fetch('http://localhost:5000/api/signals/pending/count', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      pendingCount.value = data.count
+    } else {
+      console.warn('Failed to fetch pending count:', response.status)
+      pendingCount.value = 0
+    }
+  } catch (err) {
+    console.error('Error fetching pending count:', err)
+    pendingCount.value = 0
+  }
+}
+
+// Load all dashboard data
+const loadDashboardData = async () => {
+  try {
+    loading.value = true
+    error.value = null
+
+    // Check token first
+    const token = localStorage.getItem('token')
+    if (!token) {
       router.push('/login')
       return
     }
+
+    // Fetch user data from API (not localStorage)
+    const userData = await fetchUserData()
+    user.value = userData
     
-    // Fetch data hanya jika user valid
-    await fetchSignals()
-    await fetchPendingCount()
+    // Save to localStorage for other components
+    localStorage.setItem('user', JSON.stringify(userData))
+
+    // Fetch other data in parallel
+    await Promise.all([
+      fetchSignals(),
+      fetchPendingCount()
+    ])
+
+  } catch (err) {
+    console.error('Error loading dashboard:', err)
+    error.value = err.message
     
-  } catch (error) {
-    console.error('Error in mounted hook:', error)
+    // Redirect to login if authentication failed
+    if (err.message.includes('Session expired') || err.message.includes('token')) {
+      setTimeout(() => {
+        router.push('/login')
+      }, 2000)
+    }
+  } finally {
+    loading.value = false
   }
+}
+
+// Refresh data
+const refreshData = async () => {
+  await loadDashboardData()
+}
+
+// Retry loading
+const retryLoading = async () => {
+  await loadDashboardData()
+}
+
+// Logout
+const handleLogout = () => {
+  localStorage.removeItem('token')
+  localStorage.removeItem('user')
+  router.push('/login')
+}
+
+onMounted(() => {
+  loadDashboardData()
 })
 </script>
+
+<style scoped>
+.dashboard {
+  padding: 20px;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 20px 30px;
+  border-radius: 15px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  backdrop-filter: blur(10px);
+}
+
+.dashboard-header h1 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 2em;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  font-weight: 500;
+  color: #34495e;
+}
+
+.logout-btn {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.logout-btn:hover {
+  background: #c0392b;
+  transform: translateY(-2px);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.stat-card {
+  background: rgba(255, 255, 255, 0.95);
+  padding: 25px;
+  border-radius: 15px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  backdrop-filter: blur(10px);
+  transition: transform 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-5px);
+}
+
+.stat-card h3 {
+  margin: 0 0 10px 0;
+  color: #7f8c8d;
+  font-size: 0.9em;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.stat-number {
+  font-size: 2.5em;
+  font-weight: bold;
+  color: #2c3e50;
+  margin: 0;
+}
+
+.signals-section {
+  background: rgba(255, 255, 255, 0.95);
+  padding: 30px;
+  border-radius: 15px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  backdrop-filter: blur(10px);
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.section-header h2 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.refresh-btn {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.refresh-btn:hover {
+  background: #2980b9;
+  transform: translateY(-2px);
+}
+
+.signals-table {
+  overflow-x: auto;
+  border-radius: 10px;
+  background: white;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+}
+
+th, td {
+  padding: 15px;
+  text-align: left;
+  border-bottom: 1px solid #ecf0f1;
+}
+
+th {
+  background-color: #34495e;
+  color: white;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.85em;
+  letter-spacing: 1px;
+}
+
+tr:hover {
+  background-color: #f8f9fa;
+}
+
+.buy {
+  color: #27ae60;
+  font-weight: bold;
+}
+
+.sell {
+  color: #e74c3c;
+  font-weight: bold;
+}
+
+.hold {
+  color: #f39c12;
+  font-weight: bold;
+}
+
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.8em;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.pending .status-badge {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.approved .status-badge {
+  background: #d1edff;
+  color: #0c5460;
+}
+
+.rejected .status-badge {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #7f8c8d;
+}
+
+.spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #3498db;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.error-state {
+  text-align: center;
+  padding: 40px 20px;
+  background: #f8d7da;
+  color: #721c24;
+  border-radius: 10px;
+  margin: 20px 0;
+}
+
+.retry-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 15px;
+}
+
+.retry-btn:hover {
+  background: #c82333;
+}
+
+.no-signals {
+  text-align: center;
+  padding: 60px 20px;
+  color: #7f8c8d;
+  font-size: 1.1em;
+}
+
+@media (max-width: 768px) {
+  .dashboard-header {
+    flex-direction: column;
+    gap: 15px;
+    text-align: center;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .section-header {
+    flex-direction: column;
+    gap: 15px;
+    text-align: center;
+  }
+}
+</style>
