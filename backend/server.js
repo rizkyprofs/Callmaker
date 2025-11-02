@@ -9,6 +9,7 @@ import signalRoutes from "./routes/signalRoutes.js";
 import sequelize from "./config/db.js";
 import User from "./models/User.js";
 import Signal from "./models/Signal.js";
+import signal from "./routes/signal.js";
 
 dotenv.config();
 const app = express();
@@ -29,6 +30,8 @@ app.use((req, res, next) => {
 app.use("/api/auth", authRoutes);    // Login/Register ada di sini
 app.use("/api/admin", adminRoutes);
 app.use("/api", signalRoutes);
+app.use("/api/signals", signal);
+
 
 // ✅ ✅ ✅ DASHBOARD ROUTES - UNCOMMENT YANG INI ✅ ✅ ✅
 // Get current user data

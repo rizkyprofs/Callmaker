@@ -100,14 +100,16 @@ router.post("/login", async (req, res) => {
     }
 
     // Create token
-    const token = jwt.sign(
-      { 
-        userId: user.id,
-        username: user.username 
-      },
-      process.env.JWT_SECRET || 'fallback-secret',
-      { expiresIn: "24h" }
-    );
+      const token = jwt.sign(
+        { 
+          userId: user.id,
+          username: user.username,
+          role: user.role   // ✅ tambahkan role ke dalam token
+        },
+        process.env.JWT_SECRET || 'fallback-secret',
+        { expiresIn: "24h" }
+      );
+
 
     console.log('✅ Login successful for user:', user.username);
     
