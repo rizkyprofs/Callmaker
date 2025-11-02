@@ -442,7 +442,8 @@ const fetchSignals = async () => {
   }
 }
 
-// CREATE Signal dengan multiple attempts
+
+// CREATE Signal - SIMPLIFIED
 const createSignal = async () => {
   try {
     actionLoading.value = true
@@ -457,20 +458,11 @@ const createSignal = async () => {
 
     console.log('Creating signal with data:', signalData)
 
-    // Attempt 1: Standard endpoint
-    try {
-      await apiCall(`${apiBase.value}/signals`, {
-        method: 'POST',
-        body: JSON.stringify(signalData)
-      })
-    } catch (error1) {
-      // Attempt 2: Alternative endpoint
-      console.log('Attempt 1 failed, trying alternative...')
-      await apiCall(`${apiBase.value}/signal`, {
-        method: 'POST',
-        body: JSON.stringify(signalData)
-      })
-    }
+    // ✅ CORRECT ENDPOINT
+    await apiCall(`${apiBase.value}/signals`, {
+      method: 'POST',
+      body: JSON.stringify(signalData)
+    })
 
     showCreateModal.value = false
     resetSignalForm()
@@ -485,41 +477,20 @@ const createSignal = async () => {
   }
 }
 
-// UPDATE Signal Status dengan multiple methods
+// UPDATE Signal Status - SIMPLIFIED
 const updateSignalStatus = async (signalId, status) => {
   try {
     actionLoading.value = true
     console.log(`Updating signal ${signalId} to ${status}`)
 
-    const updateData = { status }
-    
-    // Coba berbagai method dan endpoint
-    const attempts = [
-      { method: 'PATCH', url: `${apiBase.value}/signals/${signalId}/status` },
-      { method: 'PUT', url: `${apiBase.value}/signals/${signalId}/status` },
-      { method: 'PATCH', url: `${apiBase.value}/signals/${signalId}` },
-      { method: 'PUT', url: `${apiBase.value}/signals/${signalId}` }
-    ]
+    // ✅ CORRECT ENDPOINT
+    await apiCall(`${apiBase.value}/signals/${signalId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    })
 
-    let lastError = null
-    for (const attempt of attempts) {
-      try {
-        await apiCall(attempt.url, {
-          method: attempt.method,
-          body: JSON.stringify(updateData)
-        })
-        console.log(`✅ Success with ${attempt.method} ${attempt.url}`)
-        await refreshData()
-        alert(`Signal ${status} successfully!`)
-        return
-      } catch (err) {
-        lastError = err
-        console.log(`❌ Failed with ${attempt.method} ${attempt.url}:`, err.message)
-        continue
-      }
-    }
-
-    throw lastError || new Error('All update attempts failed')
+    await refreshData()
+    alert(`Signal ${status} successfully!`)
     
   } catch (err) {
     console.error('Error updating signal status:', err)
@@ -529,7 +500,7 @@ const updateSignalStatus = async (signalId, status) => {
   }
 }
 
-// DELETE Signal dengan multiple attempts
+// DELETE Signal - SIMPLIFIED
 const deleteSignal = async (signalId) => {
   if (!confirm('Are you sure you want to delete this signal? This action cannot be undone.')) return
   
@@ -537,62 +508,23 @@ const deleteSignal = async (signalId) => {
     actionLoading.value = true
     console.log(`Deleting signal: ${signalId}`)
 
-    // Coba berbagai endpoint untuk delete
-    const deleteAttempts = [
-      `${apiBase.value}/signals/${signalId}`,
-      `${apiBase.value}/signal/${signalId}`,
-      `${apiBase.value}/signals/${signalId}/delete`
-    ]
+    // ✅ CORRECT ENDPOINT - tanpa /delete
+    await apiCall(`${apiBase.value}/signals/${signalId}`, {
+      method: 'DELETE'
+    })
 
-    let lastError = null
-    for (const url of deleteAttempts) {
-      try {
-        await apiCall(url, { method: 'DELETE' })
-        console.log(`✅ Delete successful: ${url}`)
-        await refreshData()
-        alert('Signal deleted successfully!')
-        return
-      } catch (err) {
-        lastError = err
-        console.log(`❌ Delete failed: ${url}`, err.message)
-        
-        // Jika 404, coba method POST dengan action delete
-        if (err.message.includes('404')) {
-          try {
-            await apiCall(`${apiBase.value}/signals/${signalId}`, {
-              method: 'POST',
-              body: JSON.stringify({ _method: 'DELETE' })
-            })
-            console.log('✅ Delete successful with POST _method')
-            await refreshData()
-            alert('Signal deleted successfully!')
-            return
-          } catch (postError) {
-            console.log('❌ POST _method also failed:', postError.message)
-          }
-        }
-      }
-    }
-
-    throw lastError || new Error('All delete attempts failed')
+    await refreshData()
+    alert('Signal deleted successfully!')
     
   } catch (err) {
     console.error('Error deleting signal:', err)
     alert(`Failed to delete signal: ${err.message}`)
-    
-    // Show detailed error info for debugging
-    if (isDevelopment.value) {
-      console.log('💡 Debug Info:')
-      console.log('- Signal ID:', signalId)
-      console.log('- Available signals:', signals.value.map(s => ({ id: s.id, coin: s.coin_name })))
-      console.log('- User role:', user.value?.role)
-    }
   } finally {
     actionLoading.value = false
   }
 }
 
-// UPDATE Signal (edit)
+// UPDATE Signal (edit) - SIMPLIFIED
 const updateSignal = async () => {
   try {
     actionLoading.value = true
@@ -606,34 +538,17 @@ const updateSignal = async () => {
     }
 
     console.log('Updating signal:', currentSignal.value.id, signalData)
+    
+    // ✅ CORRECT ENDPOINT
+    await apiCall(`${apiBase.value}/signals/${currentSignal.value.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(signalData)
+    })
 
-    // Coba berbagai method untuk update
-    const updateAttempts = [
-      { method: 'PUT', url: `${apiBase.value}/signals/${currentSignal.value.id}` },
-      { method: 'PATCH', url: `${apiBase.value}/signals/${currentSignal.value.id}` },
-      { method: 'POST', url: `${apiBase.value}/signals/${currentSignal.value.id}` }
-    ]
-
-    let lastError = null
-    for (const attempt of updateAttempts) {
-      try {
-        await apiCall(attempt.url, {
-          method: attempt.method,
-          body: JSON.stringify(signalData)
-        })
-        console.log(`✅ Update successful with ${attempt.method}`)
-        showEditModal.value = false
-        resetSignalForm()
-        await refreshData()
-        alert('Signal updated successfully!')
-        return
-      } catch (err) {
-        lastError = err
-        console.log(`❌ Update failed with ${attempt.method}:`, err.message)
-      }
-    }
-
-    throw lastError || new Error('All update attempts failed')
+    showEditModal.value = false
+    resetSignalForm()
+    await refreshData()
+    alert('Signal updated successfully!')
     
   } catch (err) {
     console.error('Error updating signal:', err)
@@ -642,6 +557,7 @@ const updateSignal = async () => {
     actionLoading.value = false
   }
 }
+
 
 // Action wrappers
 const approveSignal = async (signalId) => {
