@@ -37,4 +37,81 @@ router.post("/", authenticate, authorizeRoles("callmaker", "admin"), async (req,
   }
 });
 
+// UPDATE signal status (approve/reject)
+router.patch('/:id/status', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    // Validasi status
+    if (!['pending', 'approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    const signal = await Signal.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    );
+
+    if (!signal) {
+      return res.status(404).json({ error: 'Signal not found' });
+    }
+
+    res.json(signal);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ - UPDATE signal (edit)
+router.put('/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { coin_name, entry_price, target_price, stop_loss, note } = req.body;
+    
+    const signal = await Signal.findByIdAndUpdate(
+      id,
+      { coin_name, entry_price, target_price, stop_loss, note },
+      { new: true }
+    );
+
+    if (!signal) {
+      return res.status(404).json({ error: 'Signal not found' });
+    }
+
+    // Cek ownership (hanya creator yang bisa edit)
+    if (signal.created_by.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized to edit this signal' });
+    }
+
+    res.json(signal);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ - DELETE signal
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const signal = await Signal.findById(id);
+    
+    if (!signal) {
+      return res.status(404).json({ error: 'Signal not found' });
+    }
+
+    // Cek ownership (hanya creator atau admin yang bisa delete)
+    if (signal.created_by.toString() !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Not authorized to delete this signal' });
+    }
+
+    await Signal.findByIdAndDelete(id);
+    res.json({ message: 'Signal deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
