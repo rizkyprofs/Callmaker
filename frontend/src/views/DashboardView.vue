@@ -292,9 +292,19 @@ const showCreateModal = ref(false)
 const showEditModal = ref(false)
 const showOnlyPending = ref(false)
 
-// Development flag
+// API configuration
 const isDevelopment = ref(process.env.NODE_ENV === 'development')
 const apiBase = ref('http://localhost:5000/api')
+
+// Debug function untuk melihat semua endpoints
+const debugEndpoints = () => {
+  console.log('🔄 Available Endpoints:')
+  console.log('GET:', `${apiBase.value}/signals`)
+  console.log('POST:', `${apiBase.value}/signals`)
+  console.log('PUT:', `${apiBase.value}/signals/:id`)
+  console.log('PATCH:', `${apiBase.value}/signals/:id/status`)
+  console.log('DELETE:', `${apiBase.value}/signals/:id`)
+}
 
 // Signal forms
 const currentSignal = ref({
@@ -306,91 +316,104 @@ const currentSignal = ref({
   note: ''
 })
 
-// Computed values
-const pendingCount = computed(() => {
-  return signals.value.filter(signal => signal.status === 'pending').length
-})
-
-const approvedCount = computed(() => {
-  return signals.value.filter(signal => signal.status === 'approved').length
-})
-
+// Computed values (tetap sama)
+const pendingCount = computed(() => signals.value.filter(signal => signal.status === 'pending').length)
+const approvedCount = computed(() => signals.value.filter(signal => signal.status === 'approved').length)
 const mySignalsCount = computed(() => {
   if (user.value && user.value.role === 'callmaker') {
     return signals.value.filter(signal => signal.created_by === user.value.id).length
   }
   return 0
 })
-
 const filteredSignals = computed(() => {
-  if (showOnlyPending.value) {
-    return signals.value.filter(signal => signal.status === 'pending')
-  }
-  
-  if (user.value?.role === 'callmaker') {
-    return signals.value.filter(signal => signal.created_by === user.value.id)
-  }
-  
+  if (showOnlyPending.value) return signals.value.filter(signal => signal.status === 'pending')
+  if (user.value?.role === 'callmaker') return signals.value.filter(signal => signal.created_by === user.value.id)
   return signals.value
 })
 
-// Utility functions
-const formatDate = (dateString) => {
-  return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
-}
-
-const formatPrice = (price) => {
-  return parseFloat(price).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4
-  })
-}
-
+// Utility functions (tetap sama)
+const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+const formatPrice = (price) => parseFloat(price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
 const getCoinSymbol = (coinName) => {
-  const symbols = {
-    'BTC': '₿',
-    'ETH': 'Ξ',
-    'ADA': 'A',
-    'SOL': 'S',
-    'XRP': 'X',
-    'ETFC': 'E'
-  }
-  
+  const symbols = { 'BTC': '₿', 'ETH': 'Ξ', 'ADA': 'A', 'SOL': 'S', 'XRP': 'X', 'ETFC': 'E' }
   const coin = coinName.split('/')[0]
   return symbols[coin] || '₿'
 }
 
-// API Calls dengan error handling yang lebih baik
+// Enhanced API Call dengan multiple fallbacks
+const apiCall = async (url, options = {}) => {
+  const token = localStorage.getItem('token')
+  const defaultHeaders = {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  }
+
+  const config = {
+    headers: { ...defaultHeaders, ...options.headers },
+    ...options
+  }
+
+  console.log(`🔄 API Call: ${config.method} ${url}`)
+  
+  try {
+    const response = await fetch(url, config)
+    console.log(`📡 Response Status: ${response.status} ${response.statusText}`)
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`❌ API Error: ${response.status}`, errorText)
+      throw new Error(`HTTP ${response.status}: ${errorText}`)
+    }
+    
+    // Coba parse sebagai JSON, fallback ke text
+    try {
+      const data = await response.json()
+      console.log('✅ API Success:', data)
+      return data
+    } catch (jsonError) {
+      console.warn('⚠️ Response is not JSON, returning as text')
+      return await response.text()
+    }
+  } catch (err) {
+    console.error('❌ Fetch Error:', err)
+    throw err
+  }
+}
+
+// Test semua endpoints
+const testEndpoints = async () => {
+  console.group('🧪 Testing Endpoints')
+  try {
+    const token = localStorage.getItem('token')
+    
+    // Test GET signals
+    console.log('Testing GET /signals...')
+    const getResponse = await fetch(`${apiBase.value}/signals`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    console.log('GET /signals:', getResponse.status, getResponse.statusText)
+    
+    // Test structure of first signal
+    if (getResponse.ok) {
+      const signalsData = await getResponse.json()
+      if (signalsData.length > 0) {
+        console.log('First signal structure:', signalsData[0])
+      }
+    }
+    
+  } catch (err) {
+    console.error('Endpoint test failed:', err)
+  }
+  console.groupEnd()
+}
+
+// Fetch User Data
 const fetchUserData = async () => {
   try {
     const token = localStorage.getItem('token')
-    if (!token) {
-      throw new Error('No authentication token found')
-    }
+    if (!token) throw new Error('No authentication token found')
 
-    console.log('Fetching user data...')
-    const response = await fetch(`${apiBase.value}/auth/user`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        localStorage.removeItem('token')
-        throw new Error('Session expired. Please login again.')
-      }
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-    }
-
-    const userData = await response.json()
-    console.log('User data fetched:', userData)
+    const userData = await apiCall(`${apiBase.value}/auth/user`, { method: 'GET' })
     return userData
   } catch (err) {
     console.error('Error fetching user data:', err)
@@ -398,35 +421,254 @@ const fetchUserData = async () => {
   }
 }
 
+// Fetch Signals dengan improved error handling
 const fetchSignals = async () => {
   try {
-    const token = localStorage.getItem('token')
-    if (!token) return
-
-    console.log('Fetching signals...')
-    const response = await fetch(`${apiBase.value}/signals`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-
-    if (response.ok) {
-      const signalsData = await response.json()
-      console.log('Signals fetched:', signalsData.length)
-      signals.value = signalsData
-    } else {
-      console.error('Failed to fetch signals:', response.status)
-      throw new Error(`Failed to fetch signals: ${response.status}`)
-    }
+    const signalsData = await apiCall(`${apiBase.value}/signals`, { method: 'GET' })
+    signals.value = signalsData
   } catch (err) {
     console.error('Error fetching signals:', err)
-    throw err
+    
+    // Fallback: coba endpoint alternatif
+    try {
+      console.log('Trying fallback endpoint...')
+      const fallbackResponse = await apiCall(`${apiBase.value}/signal`, { method: 'GET' })
+      signals.value = Array.isArray(fallbackResponse) ? fallbackResponse : [fallbackResponse]
+    } catch (fallbackError) {
+      console.error('Fallback also failed:', fallbackError)
+      signals.value = []
+      throw err
+    }
   }
 }
 
-// Main data loading
+// CREATE Signal dengan multiple attempts
+const createSignal = async () => {
+  try {
+    actionLoading.value = true
+    
+    const signalData = {
+      coin_name: currentSignal.value.coin_name,
+      entry_price: parseFloat(currentSignal.value.entry_price),
+      target_price: parseFloat(currentSignal.value.target_price),
+      stop_loss: parseFloat(currentSignal.value.stop_loss),
+      note: currentSignal.value.note || ''
+    }
+
+    console.log('Creating signal with data:', signalData)
+
+    // Attempt 1: Standard endpoint
+    try {
+      await apiCall(`${apiBase.value}/signals`, {
+        method: 'POST',
+        body: JSON.stringify(signalData)
+      })
+    } catch (error1) {
+      // Attempt 2: Alternative endpoint
+      console.log('Attempt 1 failed, trying alternative...')
+      await apiCall(`${apiBase.value}/signal`, {
+        method: 'POST',
+        body: JSON.stringify(signalData)
+      })
+    }
+
+    showCreateModal.value = false
+    resetSignalForm()
+    await refreshData()
+    alert('Signal created successfully!')
+    
+  } catch (err) {
+    console.error('Error creating signal:', err)
+    alert(`Failed to create signal: ${err.message}`)
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+// UPDATE Signal Status dengan multiple methods
+const updateSignalStatus = async (signalId, status) => {
+  try {
+    actionLoading.value = true
+    console.log(`Updating signal ${signalId} to ${status}`)
+
+    const updateData = { status }
+    
+    // Coba berbagai method dan endpoint
+    const attempts = [
+      { method: 'PATCH', url: `${apiBase.value}/signals/${signalId}/status` },
+      { method: 'PUT', url: `${apiBase.value}/signals/${signalId}/status` },
+      { method: 'PATCH', url: `${apiBase.value}/signals/${signalId}` },
+      { method: 'PUT', url: `${apiBase.value}/signals/${signalId}` }
+    ]
+
+    let lastError = null
+    for (const attempt of attempts) {
+      try {
+        await apiCall(attempt.url, {
+          method: attempt.method,
+          body: JSON.stringify(updateData)
+        })
+        console.log(`✅ Success with ${attempt.method} ${attempt.url}`)
+        await refreshData()
+        alert(`Signal ${status} successfully!`)
+        return
+      } catch (err) {
+        lastError = err
+        console.log(`❌ Failed with ${attempt.method} ${attempt.url}:`, err.message)
+        continue
+      }
+    }
+
+    throw lastError || new Error('All update attempts failed')
+    
+  } catch (err) {
+    console.error('Error updating signal status:', err)
+    alert(`Failed to update signal: ${err.message}`)
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+// DELETE Signal dengan multiple attempts
+const deleteSignal = async (signalId) => {
+  if (!confirm('Are you sure you want to delete this signal? This action cannot be undone.')) return
+  
+  try {
+    actionLoading.value = true
+    console.log(`Deleting signal: ${signalId}`)
+
+    // Coba berbagai endpoint untuk delete
+    const deleteAttempts = [
+      `${apiBase.value}/signals/${signalId}`,
+      `${apiBase.value}/signal/${signalId}`,
+      `${apiBase.value}/signals/${signalId}/delete`
+    ]
+
+    let lastError = null
+    for (const url of deleteAttempts) {
+      try {
+        await apiCall(url, { method: 'DELETE' })
+        console.log(`✅ Delete successful: ${url}`)
+        await refreshData()
+        alert('Signal deleted successfully!')
+        return
+      } catch (err) {
+        lastError = err
+        console.log(`❌ Delete failed: ${url}`, err.message)
+        
+        // Jika 404, coba method POST dengan action delete
+        if (err.message.includes('404')) {
+          try {
+            await apiCall(`${apiBase.value}/signals/${signalId}`, {
+              method: 'POST',
+              body: JSON.stringify({ _method: 'DELETE' })
+            })
+            console.log('✅ Delete successful with POST _method')
+            await refreshData()
+            alert('Signal deleted successfully!')
+            return
+          } catch (postError) {
+            console.log('❌ POST _method also failed:', postError.message)
+          }
+        }
+      }
+    }
+
+    throw lastError || new Error('All delete attempts failed')
+    
+  } catch (err) {
+    console.error('Error deleting signal:', err)
+    alert(`Failed to delete signal: ${err.message}`)
+    
+    // Show detailed error info for debugging
+    if (isDevelopment.value) {
+      console.log('💡 Debug Info:')
+      console.log('- Signal ID:', signalId)
+      console.log('- Available signals:', signals.value.map(s => ({ id: s.id, coin: s.coin_name })))
+      console.log('- User role:', user.value?.role)
+    }
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+// UPDATE Signal (edit)
+const updateSignal = async () => {
+  try {
+    actionLoading.value = true
+    
+    const signalData = {
+      coin_name: currentSignal.value.coin_name,
+      entry_price: parseFloat(currentSignal.value.entry_price),
+      target_price: parseFloat(currentSignal.value.target_price),
+      stop_loss: parseFloat(currentSignal.value.stop_loss),
+      note: currentSignal.value.note || ''
+    }
+
+    console.log('Updating signal:', currentSignal.value.id, signalData)
+
+    // Coba berbagai method untuk update
+    const updateAttempts = [
+      { method: 'PUT', url: `${apiBase.value}/signals/${currentSignal.value.id}` },
+      { method: 'PATCH', url: `${apiBase.value}/signals/${currentSignal.value.id}` },
+      { method: 'POST', url: `${apiBase.value}/signals/${currentSignal.value.id}` }
+    ]
+
+    let lastError = null
+    for (const attempt of updateAttempts) {
+      try {
+        await apiCall(attempt.url, {
+          method: attempt.method,
+          body: JSON.stringify(signalData)
+        })
+        console.log(`✅ Update successful with ${attempt.method}`)
+        showEditModal.value = false
+        resetSignalForm()
+        await refreshData()
+        alert('Signal updated successfully!')
+        return
+      } catch (err) {
+        lastError = err
+        console.log(`❌ Update failed with ${attempt.method}:`, err.message)
+      }
+    }
+
+    throw lastError || new Error('All update attempts failed')
+    
+  } catch (err) {
+    console.error('Error updating signal:', err)
+    alert(`Failed to update signal: ${err.message}`)
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+// Action wrappers
+const approveSignal = async (signalId) => {
+  if (!confirm('Are you sure you want to approve this signal?')) return
+  await updateSignalStatus(signalId, 'approved')
+}
+
+const rejectSignal = async (signalId) => {
+  if (!confirm('Are you sure you want to reject this signal?')) return
+  await updateSignalStatus(signalId, 'rejected')
+}
+
+const editSignal = (signal) => {
+  currentSignal.value = { ...signal }
+  showEditModal.value = true
+}
+
+// UI Actions (tetap sama)
+const refreshData = async () => {
+  refreshing.value = true
+  try {
+    await loadDashboardData()
+  } finally {
+    refreshing.value = false
+  }
+}
+
 const loadDashboardData = async () => {
   try {
     loading.value = true
@@ -441,236 +683,37 @@ const loadDashboardData = async () => {
     const userData = await fetchUserData()
     user.value = userData
     await fetchSignals()
-
+    
+    // Debug info
+    debugEndpoints()
+    await testEndpoints()
+    
   } catch (err) {
     console.error('Error loading dashboard:', err)
     error.value = err.message
     
     if (err.message.includes('Session expired') || err.message.includes('token')) {
-      setTimeout(() => {
-        router.push('/login')
-      }, 2000)
+      setTimeout(() => router.push('/login'), 2000)
     }
   } finally {
     loading.value = false
   }
 }
 
-// Signal Actions
-const createSignal = async () => {
-  try {
-    actionLoading.value = true
-    const token = localStorage.getItem('token')
-    
-    const signalData = {
-      coin_name: currentSignal.value.coin_name,
-      entry_price: parseFloat(currentSignal.value.entry_price),
-      target_price: parseFloat(currentSignal.value.target_price),
-      stop_loss: parseFloat(currentSignal.value.stop_loss),
-      note: currentSignal.value.note || ''
-    }
-
-    console.log('Creating signal:', signalData)
-    
-    const response = await fetch(`${apiBase.value}/signals`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(signalData)
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`HTTP ${response.status}: ${errorText}`)
-    }
-
-    const result = await response.json()
-    console.log('Signal created:', result)
-    
-    showCreateModal.value = false
-    resetSignalForm()
-    await refreshData()
-    alert('Signal created successfully!')
-    
-  } catch (err) {
-    console.error('Error creating signal:', err)
-    alert(`Failed to create signal: ${err.message}`)
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-const approveSignal = async (signalId) => {
-  if (!confirm('Are you sure you want to approve this signal?')) return
-  
-  await updateSignalStatus(signalId, 'approved')
-}
-
-const rejectSignal = async (signalId) => {
-  if (!confirm('Are you sure you want to reject this signal?')) return
-  
-  await updateSignalStatus(signalId, 'rejected')
-}
-
-const updateSignalStatus = async (signalId, status) => {
-  try {
-    actionLoading.value = true
-    const token = localStorage.getItem('token')
-    
-    console.log(`Updating signal ${signalId} to ${status}`)
-    
-    const response = await fetch(`${apiBase.value}/signals/${signalId}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ status })
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`HTTP ${response.status}: ${errorText}`)
-    }
-
-    const result = await response.json()
-    console.log('Signal status updated:', result)
-    
-    await refreshData()
-    alert(`Signal ${status} successfully!`)
-    
-  } catch (err) {
-    console.error('Error updating signal status:', err)
-    alert(`Failed to update signal: ${err.message}`)
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-const editSignal = (signal) => {
-  currentSignal.value = { ...signal }
-  showEditModal.value = true
-}
-
-const updateSignal = async () => {
-  try {
-    actionLoading.value = true
-    const token = localStorage.getItem('token')
-    
-    const signalData = {
-      coin_name: currentSignal.value.coin_name,
-      entry_price: parseFloat(currentSignal.value.entry_price),
-      target_price: parseFloat(currentSignal.value.target_price),
-      stop_loss: parseFloat(currentSignal.value.stop_loss),
-      note: currentSignal.value.note || ''
-    }
-
-    console.log('Updating signal:', currentSignal.value.id, signalData)
-    
-    const response = await fetch(`${apiBase.value}/signals/${currentSignal.value.id}`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(signalData)
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`HTTP ${response.status}: ${errorText}`)
-    }
-
-    const result = await response.json()
-    console.log('Signal updated:', result)
-    
-    showEditModal.value = false
-    resetSignalForm()
-    await refreshData()
-    alert('Signal updated successfully!')
-    
-  } catch (err) {
-    console.error('Error updating signal:', err)
-    alert(`Failed to update signal: ${err.message}`)
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-const deleteSignal = async (signalId) => {
-  if (!confirm('Are you sure you want to delete this signal? This action cannot be undone.')) return
-  
-  try {
-    actionLoading.value = true
-    const token = localStorage.getItem('token')
-    
-    console.log('Deleting signal:', signalId)
-    
-    const response = await fetch(`${apiBase.value}/signals/${signalId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`HTTP ${response.status}: ${errorText}`)
-    }
-
-    await refreshData()
-    alert('Signal deleted successfully!')
-    
-  } catch (err) {
-    console.error('Error deleting signal:', err)
-    alert(`Failed to delete signal: ${err.message}`)
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-// UI Actions
-const refreshData = async () => {
-  refreshing.value = true
-  try {
-    await loadDashboardData()
-  } finally {
-    refreshing.value = false
-  }
-}
-
-const retryLoading = async () => {
-  await loadDashboardData()
-}
-
+const retryLoading = async () => await loadDashboardData()
 const handleLogout = () => {
   localStorage.removeItem('token')
   localStorage.removeItem('user')
   router.push('/login')
 }
-
-const togglePendingFilter = () => {
-  showOnlyPending.value = !showOnlyPending.value
-}
-
+const togglePendingFilter = () => showOnlyPending.value = !showOnlyPending.value
 const closeModal = () => {
   showCreateModal.value = false
   showEditModal.value = false
   resetSignalForm()
 }
-
 const resetSignalForm = () => {
-  currentSignal.value = {
-    id: null,
-    coin_name: '',
-    entry_price: '',
-    target_price: '',
-    stop_loss: '',
-    note: ''
-  }
+  currentSignal.value = { id: null, coin_name: '', entry_price: '', target_price: '', stop_loss: '', note: '' }
 }
 
 onMounted(() => {
