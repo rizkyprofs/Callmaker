@@ -1,115 +1,133 @@
-import express from "express";
-import authenticate from "../middleware/auth.js";
-import { authorizeRoles } from "../middleware/role.js";
-import Signal from "../models/Signal.js";
+import express from 'express';
+import Signal from '../models/Signal.js';
+import authenticate from '../middleware/auth.js';
 
-const express = require('express');
 const router = express.Router();
-const Signal = require('../models/Signal');
-const auth = require('../middleware/auth');
 
-// 🔹 Semua user bisa lihat sinyal yang sudah di-ACC
-router.get("/", authenticate, async (req, res) => {
+// GET all signals
+router.get('/', authenticate, async (req, res) => {
   try {
-    const signals = await Signal.findAll({ where: { status: "approved" } });
+    const signals = await Signal.findAll({ order: [['created_at', 'DESC']] });
     res.json(signals);
-  } catch (err) {
-    res.status(500).json({ message: "Gagal mengambil data sinyal" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-// 🔹 Callmaker boleh menambahkan sinyal baru
-router.post("/", authenticate, authorizeRoles("callmaker", "admin"), async (req, res) => {
+// CREATE signal  
+router.post('/', authenticate, async (req, res) => {
   try {
-    const { title, pair, entry, takeProfit, stopLoss } = req.body;
-    const newSignal = await Signal.create({
-      title,
-      pair,
-      entry,
-      takeProfit,
-      stopLoss,
-      status: "pending",
+    const { coin_name, entry_price, target_price, stop_loss, note } = req.body;
+    
+    const signal = await Signal.create({
+      coin_name,
+      entry_price,
+      target_price,
+      stop_loss,
+      note,
       created_by: req.user.id,
+      status: 'pending'
     });
-    res.json({ message: "Sinyal berhasil ditambahkan", signal: newSignal });
-  } catch (err) {
-    res.status(500).json({ message: "Gagal menambahkan sinyal" });
+
+    res.status(201).json(signal);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
 });
 
 // UPDATE signal status (approve/reject)
-router.patch('/:id/status', auth, async (req, res) => {
+router.patch('/:id/status', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
     
-    // Validasi status
+    console.log('🟢 PATCH status endpoint called:', id, status);
+    
     if (!['pending', 'approved', 'rejected'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status' });
     }
 
-    const signal = await Signal.findByIdAndUpdate(
-      id,
-      { status },
-      { new: true }
-    );
-
+    const signal = await Signal.findByPk(id);
+    
     if (!signal) {
       return res.status(404).json({ error: 'Signal not found' });
     }
 
+    signal.status = status;
+    await signal.save();
+
     res.json(signal);
   } catch (error) {
+    console.error('🔴 Status update error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// ✅ - UPDATE signal (edit)
-router.put('/:id', auth, async (req, res) => {
+// UPDATE signal (edit)
+router.put('/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const { coin_name, entry_price, target_price, stop_loss, note } = req.body;
     
-    const signal = await Signal.findByIdAndUpdate(
-      id,
-      { coin_name, entry_price, target_price, stop_loss, note },
-      { new: true }
-    );
-
+    console.log('🟢 PUT endpoint called:', id);
+    
+    const signal = await Signal.findByPk(id);
+    
     if (!signal) {
       return res.status(404).json({ error: 'Signal not found' });
     }
 
-    // Cek ownership (hanya creator yang bisa edit)
-    if (signal.created_by.toString() !== req.user.id) {
+    // Cek ownership
+    if (signal.created_by !== req.user.id) {
       return res.status(403).json({ error: 'Not authorized to edit this signal' });
     }
 
+    signal.coin_name = coin_name;
+    signal.entry_price = entry_price;
+    signal.target_price = target_price;
+    signal.stop_loss = stop_loss;
+    signal.note = note;
+    
+    await signal.save();
+
     res.json(signal);
   } catch (error) {
+    console.error('🔴 Update error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// ✅ - DELETE signal
-router.delete('/:id', auth, async (req, res) => {
+// DELETE signal
+router.delete('/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     
-    const signal = await Signal.findById(id);
+    console.log('🟢 DELETE endpoint called with ID:', id);
+    
+    const signal = await Signal.findByPk(id);
     
     if (!signal) {
+      console.log('🔴 Signal not found with ID:', id);
       return res.status(404).json({ error: 'Signal not found' });
     }
 
+    console.log('🟢 Signal found:', signal.coin_name);
+    console.log('🟢 User role:', req.user.role);
+    console.log('🟢 Signal created_by:', signal.created_by);
+    console.log('🟢 Current user ID:', req.user.id);
+
     // Cek ownership (hanya creator atau admin yang bisa delete)
-    if (signal.created_by.toString() !== req.user.id && req.user.role !== 'admin') {
+    if (signal.created_by !== req.user.id && req.user.role !== 'admin') {
+      console.log('🔴 Not authorized to delete');
       return res.status(403).json({ error: 'Not authorized to delete this signal' });
     }
 
-    await Signal.findByIdAndDelete(id);
+    await signal.destroy();
+    console.log('🟢 Signal deleted successfully');
     res.json({ message: 'Signal deleted successfully' });
+    
   } catch (error) {
+    console.error('🔴 Delete error:', error);
     res.status(500).json({ error: error.message });
   }
 });
