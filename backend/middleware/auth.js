@@ -1,9 +1,11 @@
+// middleware/auth.js - FIXED VERSION
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import User from "../models/User.js";
 
 dotenv.config();
 
-export default function authenticate(req, res, next) {
+export default async function authenticate(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
 
@@ -13,7 +15,20 @@ export default function authenticate(req, res, next) {
 
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+
+    // Ambil user dari DB biar dapat role juga
+    const user = await User.findByPk(decoded.userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
+    }
+
+    // Set data lengkap user ke request
+    req.user = {
+      id: user.id,
+      username: user.username,
+      role: user.role
+    };
 
     next();
   } catch (err) {
