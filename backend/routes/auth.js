@@ -8,6 +8,62 @@ import dotenv from "dotenv";
 dotenv.config();
 const router = express.Router();
 
+// GET CURRENT USER DATA
+router.get("/user", async (req, res) => {
+  try {
+    console.log('🔐 GET /api/auth/user called');
+    
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    console.log('🔑 Token present:', token ? 'YES' : 'NO');
+
+    if (!token) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Access token required' 
+      });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret');
+    console.log('✅ Token decoded userId:', decoded.userId);
+    
+    const user = await User.findByPk(decoded.userId, {
+      attributes: { exclude: ['password'] }
+    });
+
+    console.log('👤 User found:', user ? user.username : 'NOT FOUND');
+
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'User not found' 
+      });
+    }
+
+    res.json({
+      id: user.id,
+      username: user.username,
+      name: user.fullname,
+      role: user.role,
+      createdAt: user.createdAt
+    });
+  } catch (error) {
+    console.error('❌ Get user error:', error);
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(403).json({ 
+        success: false,
+        error: 'Invalid token' 
+      });
+    }
+    res.status(500).json({ 
+      success: false,
+      error: 'Server error: ' + error.message 
+    });
+  }
+});
+
+
 // LOGIN ONLY
 router.post("/login", async (req, res) => {
   try {

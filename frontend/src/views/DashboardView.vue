@@ -2,42 +2,28 @@
 <template>
   <div class="dashboard">
     <div class="container">
-      <!-- Header dengan Navbar -->
-      <nav class="navbar">
-        <div class="nav-brand">
-          <h1>📊 Dashboard</h1>
+      <!-- Header -->
+      <div class="dashboard-header">
+        <h1>Dashboard</h1>
+        <div class="user-info" v-if="user">
+          <span>Welcome, {{ user.name }} ({{ user.role }})</span>
+          <button @click="handleLogout" class="logout-btn">Logout</button>
         </div>
-        <div class="nav-actions" v-if="user">
-          <span class="user-welcome">Welcome, <strong>{{ user.name }}</strong> ({{ user.role }})</span>
-          <button @click="handleLogout" class="logout-btn">🚪 Logout</button>
-        </div>
-        <div class="nav-actions" v-else>
-          <button @click="goToLogin" class="login-btn">🔑 Login</button>
-        </div>
-      </nav>
+      </div>
 
       <!-- Stats Cards -->
       <div class="stats-grid">
-        <div class="stat-card total">
-          <div class="stat-icon">📈</div>
-          <div class="stat-info">
-            <h3>TOTAL SIGNALS</h3>
-            <p class="stat-number">{{ signals.length }}</p>
-          </div>
+        <div class="stat-card">
+          <h3>Total Signals</h3>
+          <p class="stat-number">{{ signals.length }}</p>
         </div>
-        <div class="stat-card pending">
-          <div class="stat-icon">⏳</div>
-          <div class="stat-info">
-            <h3>PENDING SIGNALS</h3>
-            <p class="stat-number">{{ pendingCount }}</p>
-          </div>
+        <div class="stat-card">
+          <h3>Pending Signals</h3>
+          <p class="stat-number">{{ pendingCount }}</p>
         </div>
-        <div class="stat-card approved">
-          <div class="stat-icon">✅</div>
-          <div class="stat-info">
-            <h3>APPROVED SIGNALS</h3>
-            <p class="stat-number">{{ approvedCount }}</p>
-          </div>
+        <div class="stat-card">
+          <h3>Approved Signals</h3>
+          <p class="stat-number">{{ approvedCount }}</p>
         </div>
       </div>
 
@@ -49,71 +35,46 @@
 
       <!-- Error State -->
       <div v-else-if="error" class="error-state">
-        <div class="error-icon">❌</div>
-        <div class="error-content">
-          <h3>Error Loading Dashboard</h3>
-          <p>{{ error }}</p>
-          <div class="error-actions">
-            <button @click="retryLoading" class="retry-btn">🔄 Try Again</button>
-            <button @click="handleLogout" class="logout-btn-small">🔑 Re-login</button>
-          </div>
-        </div>
+        <p>❌ {{ error }}</p>
+        <button @click="retryLoading" class="retry-btn">Try Again</button>
       </div>
 
-      <!-- Main Content -->
-      <div v-else class="main-content">
-        <!-- Actions Bar -->
-        <div class="actions-bar">
-          <h2>Your Trading Signals</h2>
-          <div class="action-buttons">
-            <button @click="refreshData" class="refresh-btn">🔄 Refresh Data</button>
-            <button @click="createSignal" class="create-btn">➕ Create Signal</button>
-          </div>
+      <!-- Signals Table -->
+      <div v-else class="signals-section">
+        <div class="section-header">
+          <h2>Your Signals</h2>
+          <button @click="refreshData" class="refresh-btn">🔄 Refresh</button>
         </div>
-
-        <!-- Signals Table -->
-        <div class="content-card">
-          <div v-if="signals.length === 0" class="empty-state">
-            <div class="empty-icon">📭</div>
-            <h3>No Signals Yet</h3>
-            <p>Create your first trading signal to get started</p>
-            <button @click="createSignal" class="create-btn">Create First Signal</button>
-          </div>
-          
-          <div v-else class="signals-table-container">
-            <table class="signals-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Symbol</th>
-                  <th>Action</th>
-                  <th>Price</th>
-                  <th>Status</th>
-                  <th>Date Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="signal in signals" :key="signal.id" class="signal-row">
-                  <td class="signal-name">{{ signal.name }}</td>
-                  <td class="signal-symbol">
-                    <span class="symbol-badge">{{ signal.symbol }}</span>
-                  </td>
-                  <td>
-                    <span :class="['action-badge', signal.action.toLowerCase()]">
-                      {{ signal.action }}
-                    </span>
-                  </td>
-                  <td class="signal-price">${{ Number(signal.price).toFixed(2) }}</td>
-                  <td>
-                    <span :class="['status-badge', signal.status]">
-                      {{ signal.status }}
-                    </span>
-                  </td>
-                  <td class="signal-date">{{ formatDate(signal.createdAt) }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        
+        <div v-if="signals.length === 0" class="no-signals">
+          <p>No signals found. Create your first signal!</p>
+        </div>
+        
+        <div v-else class="signals-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Coin Name</th>
+                <th>Entry Price</th>
+                <th>Target Price</th>
+                <th>Stop Loss</th>
+                <th>Status</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="signal in signals" :key="signal.id">
+                <td>{{ signal.coin_name }}</td>
+                <td>${{ signal.entry_price }}</td>
+                <td>${{ signal.target_price }}</td>
+                <td>${{ signal.stop_loss }}</td>
+                <td :class="signal.status">
+                  <span class="status-badge">{{ signal.status }}</span>
+                </td>
+                <td>{{ formatDate(signal.created_at) }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -141,13 +102,11 @@ const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+    day: 'numeric'
   })
 }
 
-// Fetch user data dari database - ✅ ENDPOINT YANG BENAR
+// ✅ FIXED: Fetch user data dari API, bukan localStorage
 const fetchUserData = async () => {
   try {
     const token = localStorage.getItem('token')
@@ -165,10 +124,7 @@ const fetchUserData = async () => {
     })
 
     if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
-        throw new Error('Session expired. Please login again.')
-      }
-      throw new Error(`Failed to fetch user data: ${response.status} - ${response.statusText}`)
+      throw new Error(`Failed to fetch user data: ${response.status}`)
     }
 
     const userData = await response.json()
@@ -185,6 +141,7 @@ const fetchSignals = async () => {
     const token = localStorage.getItem('token')
     if (!token) return
 
+    // ✅ Endpoint untuk signals (sesuai routes di backend)
     const response = await fetch('http://localhost:5000/api/signals', {
       method: 'GET',
       headers: {
@@ -212,7 +169,7 @@ const fetchPendingCount = async () => {
     const token = localStorage.getItem('token')
     if (!token) return
 
-    // Hitung manual dari signals yang ada
+    // Hitung manual dari signals
     const pending = signals.value.filter(signal => signal.status === 'pending').length
     pendingCount.value = pending
   } catch (err) {
@@ -229,30 +186,16 @@ const loadDashboardData = async () => {
 
     // Check token first
     const token = localStorage.getItem('token')
-    const savedUser = localStorage.getItem('user')
-    
     if (!token) {
       router.push('/login')
       return
     }
 
-    // Jika ada user di localStorage, tampilkan dulu
-    if (savedUser) {
-      try {
-        user.value = JSON.parse(savedUser)
-      } catch (e) {
-        console.warn('Invalid user data in localStorage')
-      }
-    }
-
-    // Fetch user data from API
+    // ✅ FIXED: Fetch user data dari API, bukan localStorage
     const userData = await fetchUserData()
     user.value = userData
-    
-    // Save to localStorage
-    localStorage.setItem('user', JSON.stringify(userData))
 
-    // Fetch signals
+    // Fetch signals data
     await fetchSignals()
     
     // Calculate pending count
@@ -261,42 +204,26 @@ const loadDashboardData = async () => {
   } catch (err) {
     console.error('Error loading dashboard:', err)
     error.value = err.message
-    
-    // Clear invalid data
-    if (err.message.includes('Session expired') || err.message.includes('token')) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      setTimeout(() => {
-        router.push('/login')
-      }, 3000)
-    }
   } finally {
     loading.value = false
   }
 }
 
-// Navigation functions
-const goToLogin = () => {
-  router.push('/login')
-}
-
-const handleLogout = () => {
-  localStorage.removeItem('token')
-  localStorage.removeItem('user')
-  router.push('/login')
-}
-
-const createSignal = () => {
-  // Redirect to create signal page or show modal
-  alert('Create signal functionality - Redirect to signal creation page')
-}
-
+// Refresh data
 const refreshData = async () => {
   await loadDashboardData()
 }
 
+// Retry loading
 const retryLoading = async () => {
   await loadDashboardData()
+}
+
+// Logout
+const handleLogout = () => {
+  localStorage.removeItem('token')
+  localStorage.removeItem('user')
+  router.push('/login')
 }
 
 onMounted(() => {
@@ -306,140 +233,145 @@ onMounted(() => {
 
 <style scoped>
 .dashboard {
+  padding: 20px;
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 0;
+  background-color: #f5f5f5;
 }
 
 .container {
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
 }
 
-/* Navbar Styles */
-.navbar {
+.dashboard-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(255, 255, 255, 0.95);
-  padding: 15px 30px;
-  border-radius: 15px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-  backdrop-filter: blur(10px);
   margin-bottom: 30px;
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
-.nav-brand h1 {
-  margin: 0;
-  color: #2c3e50;
-  font-size: 1.8em;
-}
-
-.nav-actions {
+.user-info {
   display: flex;
   align-items: center;
   gap: 15px;
 }
 
-.user-welcome {
-  color: #34495e;
-  font-weight: 500;
-}
-
-.logout-btn, .login-btn {
-  background: #e74c3c;
+.logout-btn {
+  background: #ff4757;
   color: white;
   border: none;
-  padding: 10px 20px;
-  border-radius: 8px;
+  padding: 8px 16px;
+  border-radius: 5px;
   cursor: pointer;
-  font-weight: 600;
-  transition: all 0.3s ease;
-  font-size: 14px;
 }
 
-.login-btn {
-  background: #27ae60;
+.logout-btn:hover {
+  background: #ff3742;
 }
 
-.logout-btn:hover, .login-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-}
-
-/* Stats Grid */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 25px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
   margin-bottom: 30px;
 }
 
 .stat-card {
-  background: rgba(255, 255, 255, 0.95);
+  background: white;
   padding: 25px;
-  border-radius: 15px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-  backdrop-filter: blur(10px);
-  transition: all 0.3s ease;
-  border-left: 5px solid;
-}
-
-.stat-card:hover {
-  transform: translateY(-5px);
-}
-
-.stat-card.total {
-  border-left-color: #3498db;
-}
-
-.stat-card.pending {
-  border-left-color: #f39c12;
-}
-
-.stat-card.approved {
-  border-left-color: #27ae60;
-}
-
-.stat-icon {
-  font-size: 2.5em;
-}
-
-.stat-info h3 {
-  margin: 0 0 8px 0;
-  color: #7f8c8d;
-  font-size: 0.9em;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  border-radius: 10px;
+  text-align: center;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
 .stat-number {
-  font-size: 2.2em;
+  font-size: 2.5em;
   font-weight: bold;
   color: #2c3e50;
-  margin: 0;
+  margin: 10px 0 0 0;
 }
 
-/* Loading State */
+.signals-section {
+  background: white;
+  padding: 25px;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.signals-table {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+}
+
+th, td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+}
+
+.pending {
+  color: #f39c12;
+  font-weight: bold;
+}
+
+.approved {
+  color: #27ae60;
+  font-weight: bold;
+}
+
+.rejected {
+  color: #e74c3c;
+  font-weight: bold;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  font-weight: 600;
+}
+
+.pending .status-badge {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.approved .status-badge {
+  background: #d1edff;
+  color: #0c5460;
+}
+
+.rejected .status-badge {
+  background: #f8d7da;
+  color: #721c24;
+}
+
 .loading-state {
   text-align: center;
-  padding: 80px 20px;
-  color: #7f8c8d;
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 15px;
-  backdrop-filter: blur(10px);
+  padding: 60px 20px;
+  color: #666;
 }
 
 .spinner {
   border: 4px solid #f3f3f3;
   border-top: 4px solid #3498db;
   border-radius: 50%;
-  width: 50px;
-  height: 50px;
+  width: 40px;
+  height: 40px;
   animation: spin 1s linear infinite;
   margin: 0 auto 20px;
 }
@@ -449,253 +381,38 @@ onMounted(() => {
   100% { transform: rotate(360deg); }
 }
 
-/* Error State */
 .error-state {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 30px;
-  border-radius: 15px;
-  backdrop-filter: blur(10px);
-  margin-bottom: 30px;
-}
-
-.error-icon {
-  font-size: 3em;
-}
-
-.error-content h3 {
-  margin: 0 0 10px 0;
-  color: #e74c3c;
-}
-
-.error-content p {
-  margin: 0 0 15px 0;
-  color: #666;
-}
-
-.error-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.retry-btn, .logout-btn-small {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.3s ease;
+  text-align: center;
+  padding: 40px 20px;
+  background: #f8d7da;
+  color: #721c24;
+  border-radius: 10px;
+  margin: 20px 0;
 }
 
 .retry-btn {
-  background: #3498db;
+  background: #dc3545;
   color: white;
-}
-
-.logout-btn-small {
-  background: #95a5a6;
-  color: white;
-}
-
-/* Main Content */
-.main-content {
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 15px;
-  padding: 30px;
-  backdrop-filter: blur(10px);
-}
-
-.actions-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 25px;
-}
-
-.actions-bar h2 {
-  margin: 0;
-  color: #2c3e50;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 12px;
-}
-
-.refresh-btn, .create-btn {
-  padding: 10px 20px;
   border: none;
-  border-radius: 8px;
+  padding: 10px 20px;
+  border-radius: 5px;
   cursor: pointer;
-  font-weight: 600;
-  transition: all 0.3s ease;
-  font-size: 14px;
+  margin-top: 15px;
+}
+
+.no-signals {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+  font-size: 1.1em;
 }
 
 .refresh-btn {
   background: #3498db;
   color: white;
-}
-
-.create-btn {
-  background: #27ae60;
-  color: white;
-}
-
-.refresh-btn:hover, .create-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-}
-
-/* Content Card */
-.content-card {
-  background: white;
-  border-radius: 10px;
-  padding: 0;
-  overflow: hidden;
-}
-
-/* Empty State */
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-  color: #7f8c8d;
-}
-
-.empty-icon {
-  font-size: 4em;
-  margin-bottom: 20px;
-}
-
-.empty-state h3 {
-  margin: 0 0 10px 0;
-  color: #2c3e50;
-}
-
-.empty-state p {
-  margin: 0 0 25px 0;
-  font-size: 1.1em;
-}
-
-/* Signals Table */
-.signals-table-container {
-  overflow-x: auto;
-}
-
-.signals-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.signals-table th {
-  background: #34495e;
-  color: white;
-  padding: 15px;
-  text-align: left;
-  font-weight: 600;
-  text-transform: uppercase;
-  font-size: 0.85em;
-  letter-spacing: 1px;
-}
-
-.signals-table td {
-  padding: 15px;
-  border-bottom: 1px solid #ecf0f1;
-}
-
-.signal-row:hover {
-  background-color: #f8f9fa;
-}
-
-.signal-name {
-  font-weight: 500;
-  color: #2c3e50;
-}
-
-.symbol-badge {
-  background: #e8f4fd;
-  color: #2980b9;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-weight: 600;
-  font-size: 0.85em;
-}
-
-.action-badge, .status-badge {
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 0.8em;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.action-badge.buy {
-  background: #d5f4e6;
-  color: #27ae60;
-}
-
-.action-badge.sell {
-  background: #fde8e8;
-  color: #e74c3c;
-}
-
-.action-badge.hold {
-  background: #fef5e7;
-  color: #f39c12;
-}
-
-.status-badge.pending {
-  background: #fff3cd;
-  color: #856404;
-}
-
-.status-badge.approved {
-  background: #d1edff;
-  color: #0c5460;
-}
-
-.status-badge.rejected {
-  background: #f8d7da;
-  color: #721c24;
-}
-
-.signal-price {
-  font-weight: 600;
-  color: #2c3e50;
-}
-
-.signal-date {
-  color: #7f8c8d;
-  font-size: 0.9em;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .navbar {
-    flex-direction: column;
-    gap: 15px;
-    text-align: center;
-  }
-  
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .actions-bar {
-    flex-direction: column;
-    gap: 15px;
-    text-align: center;
-  }
-  
-  .action-buttons {
-    justify-content: center;
-  }
-  
-  .stat-card {
-    flex-direction: column;
-    text-align: center;
-  }
+  border: none;
+  padding: 8px 16px;
+  border-radius: 5px;
+  cursor: pointer;
 }
 </style>
