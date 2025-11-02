@@ -1,53 +1,57 @@
-// models/Signal.js - UPDATED VERSION
+// models/Signal.js - SESUAIKAN DENGAN DATABASE
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
-import User from './User.js';
 
 const Signal = sequelize.define('Signal', {
   id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
+    type: DataTypes.INTEGER, // ✅ INTEGER, bukan UUID
     primaryKey: true,
+    autoIncrement: true,
   },
-  userId: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: {
-      model: 'Users',
-      key: 'id',
-    },
-  },
-  name: {
-    type: DataTypes.STRING,
+  coin_name: {
+    type: DataTypes.STRING(50),
     allowNull: false,
   },
-  symbol: {
-    type: DataTypes.STRING,
+  entry_price: {
+    type: DataTypes.FLOAT,
     allowNull: false,
   },
-  action: {
-    type: DataTypes.ENUM('BUY', 'SELL', 'HOLD'),
+  target_price: {
+    type: DataTypes.FLOAT,
     allowNull: false,
   },
-  price: {
-    type: DataTypes.DECIMAL(10, 2),
+  stop_loss: {
+    type: DataTypes.FLOAT,
     allowNull: false,
+  },
+  note: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  chart_image: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
   },
   status: {
     type: DataTypes.ENUM('pending', 'approved', 'rejected'),
     defaultValue: 'pending',
   },
-  createdAt: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
+  created_by: {
+    type: DataTypes.INTEGER, // ✅ INTEGER foreign key
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id',
+    },
   },
-  updatedAt: {
+  created_at: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW,
+    field: 'created_at', // ✅ Match dengan nama kolom
   },
 }, {
   tableName: 'signals',
-  timestamps: true,
+  timestamps: false, // ✅ Nonaktifkan timestamps otomatis karena kita punya created_at manual
 });
 
 export default Signal;

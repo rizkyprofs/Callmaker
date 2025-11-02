@@ -1,57 +1,41 @@
-// models/User.js - UPDATED VERSION
+// models/User.js - SESUAIKAN DENGAN DATABASE
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
-import Signal from './Signal.js';
 
 const User = sequelize.define('User', {
   id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
+    type: DataTypes.INTEGER, // ✅ INTEGER, bukan UUID
     primaryKey: true,
+    autoIncrement: true,
   },
-  name: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  email: {
-    type: DataTypes.STRING,
+  username: {
+    type: DataTypes.STRING(100),
     allowNull: false,
     unique: true,
   },
   password: {
-    type: DataTypes.STRING,
+    type: DataTypes.STRING(255),
     allowNull: false,
   },
   role: {
-    type: DataTypes.ENUM('user', 'admin'),
+    type: DataTypes.ENUM('admin', 'callmaker', 'user'),
     defaultValue: 'user',
+  },
+  fullname: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
   },
   createdAt: {
     type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
+    field: 'createdAt', // ✅ Match dengan nama kolom di database
   },
   updatedAt: {
     type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
+    field: 'updatedAt', // ✅ Match dengan nama kolom di database
   },
 }, {
   tableName: 'users',
-  timestamps: true,
+  timestamps: true, // ✅ Sequelize akan handle createdAt/updatedAt otomatis
 });
-
-// Associations
-User.associate = (models) => {
-  User.hasMany(models.Signal, {
-    foreignKey: 'userId',
-    as: 'signals'
-  });
-};
-
-Signal.associate = (models) => {
-  Signal.belongsTo(models.User, {
-    foreignKey: 'userId',
-    as: 'user'
-  });
-};
 
 export default User;

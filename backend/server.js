@@ -1,7 +1,8 @@
-// server.js - SIMPLIFIED FIXED VERSION
+// server.js - HYBRID FIXED VERSION
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import jwt from "jsonwebtoken";
 import authRoutes from "./routes/auth.js";
 import adminRoutes from "./routes/admin.js";
 import signalRoutes from "./routes/signalRoutes.js";
@@ -18,42 +19,57 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Routes
-app.use("/api", authRoutes);
+// Log requests untuk debug
+app.use((req, res, next) => {
+  console.log(`📍 ${req.method} ${req.url}`);
+  next();
+});
+
+// ✅ ROUTES UTAMA
+app.use("/api/auth", authRoutes);    // Login/Register ada di sini
 app.use("/api/admin", adminRoutes);
 app.use("/api", signalRoutes);
 
-// ✅ ✅ ✅ FIXED ROUTES UNTUK DASHBOARD ✅ ✅ ✅
-
+// ✅ ✅ ✅ DASHBOARD ROUTES - UNCOMMENT YANG INI ✅ ✅ ✅
 // Get current user data
 app.get("/api/user", async (req, res) => {
   try {
+    console.log('🔐 GET /api/user called');
+    
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
+
+    console.log('🔑 Token present:', token ? 'YES' : 'NO');
 
     if (!token) {
       return res.status(401).json({ error: 'Access token required' });
     }
 
-    // Dynamic import untuk jwt
-    const jwt = await import('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret');
+    console.log('✅ Token decoded userId:', decoded.userId);
     
     const user = await User.findByPk(decoded.userId, {
       attributes: { exclude: ['password'] }
     });
 
+    console.log('👤 User found:', user ? user.username : 'NOT FOUND');
+
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json(user);
+    res.json({
+      id: user.id,
+      username: user.username,
+      name: user.fullname,
+      role: user.role
+    });
   } catch (error) {
-    console.error('Error fetching user:', error);
+    console.error('❌ Error fetching user:', error);
     if (error.name === 'JsonWebTokenError') {
       return res.status(403).json({ error: 'Invalid token' });
     }
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error: ' + error.message });
   }
 });
 
@@ -67,20 +83,16 @@ app.get("/api/signals/user", async (req, res) => {
       return res.status(401).json({ error: 'Access token required' });
     }
 
-    const jwt = await import('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret');
     
     const signals = await Signal.findAll({
-      where: { userId: decoded.userId },
-      order: [['createdAt', 'DESC']]
+      where: { created_by: decoded.userId }, // ✅ created_by, bukan userId
+      order: [['created_at', 'DESC']]
     });
 
     res.json(signals || []);
   } catch (error) {
     console.error('Error fetching signals:', error);
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(403).json({ error: 'Invalid token' });
-    }
     res.json([]);
   }
 });
@@ -95,12 +107,11 @@ app.get("/api/signals/pending/count", async (req, res) => {
       return res.status(401).json({ error: 'Access token required' });
     }
 
-    const jwt = await import('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret');
     
     const count = await Signal.count({
       where: { 
-        userId: decoded.userId,
+        created_by: decoded.userId, // ✅ created_by, bukan userId
         status: 'pending'
       }
     });
@@ -108,9 +119,6 @@ app.get("/api/signals/pending/count", async (req, res) => {
     res.json({ count: count || 0 });
   } catch (error) {
     console.error('Error counting pending signals:', error);
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(403).json({ error: 'Invalid token' });
-    }
     res.json({ count: 0 });
   }
 });
@@ -124,10 +132,6 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Setup associations
-User.associate({ Signal });
-Signal.associate({ User });
-
 // Sync database
 sequelize.sync({ force: false })
   .then(() => {
@@ -139,7 +143,8 @@ sequelize.sync({ force: false })
 
 app.listen(5000, () => {
   console.log("🚀 Server running on port 5000");
-  console.log("📊 Dashboard routes available:");
+  console.log("🔑 Login endpoint: POST /api/auth/login");
+  console.log("📊 Dashboard endpoints:");
   console.log("   GET /api/user");
   console.log("   GET /api/signals/user"); 
   console.log("   GET /api/signals/pending/count");
