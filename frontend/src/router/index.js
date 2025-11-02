@@ -1,7 +1,7 @@
 // src/router/index.js - UPDATE
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '../views/LoginView.vue'
-import Dashboard from '../views/Dashboard.vue'
+import Dashboard from '../views/DashboardView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
