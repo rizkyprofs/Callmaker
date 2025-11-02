@@ -40,37 +40,41 @@
 </template>
 
 <script setup>
-import { ref } from "vue";          // ✅ Tambahkan ini
-import axios from "axios";
-import { useRouter } from "vue-router";
+import { ref } from 'vue'
+import axios from 'axios'
+import { useRouter } from 'vue-router'
 
-const router = useRouter();
-const username = ref("");           // ✅ Tambahkan ini
-const password = ref("");           // ✅ Tambahkan ini
+const router = useRouter()
+const username = ref('')
+const password = ref('')
+const isLoading = ref(false)
 
 const handleLogin = async () => {
-  if (!username.value || !password.value) {
-    alert("Please fill in both fields");
-    return;
-  }
+  if (isLoading.value) return
+  
+  isLoading.value = true
 
   try {
-    const res = await axios.post("http://localhost:5000/api/login", {
+    const res = await axios.post('http://localhost:5000/api/login', {
       username: username.value,
-      password: password.value,
-    });
-
-    // Simpan token & user info
-    localStorage.setItem("token", res.data.token);
-    localStorage.setItem("user", JSON.stringify(res.data.user));
-
-    alert("✅ Login berhasil!");
-    router.push("/dashboard");
+      password: password.value
+    })
+    
+    localStorage.setItem('token', res.data.token)
+    localStorage.setItem('user', JSON.stringify(res.data.user))
+    
+    console.log('✅ Login successful, redirecting...')
+    
+    // Force redirect ke dashboard
+    window.location.href = '/dashboard'
+    
   } catch (err) {
-    console.error(err);
-    alert(err.response?.data?.message || "❌ Login failed!");
+    console.error('❌ Login error:', err)
+    alert(err.response?.data?.message || 'Login failed')
+  } finally {
+    isLoading.value = false
   }
-};
+}
 </script>
 
 

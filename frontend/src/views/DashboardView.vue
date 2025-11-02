@@ -308,21 +308,53 @@ const formatDate = (dateString) => {
   })
 }
 
-const logout = () => {
+const logout = async () => {
+  console.log('🔄 Logging out...')
+  
+  // Clear localStorage
   localStorage.removeItem('token')
   localStorage.removeItem('user')
-  router.push('/login')
+  
+  // Clear state
+  user.value = null
+  signals.value = []
+  
+  // Force redirect to login
+  console.log('➡️ Redirecting to login...')
+  window.location.href = '/login'  // ⚠️ PAKAI INI untuk force redirect
 }
 
-onMounted(() => {
-  // Get user data
-  const userData = localStorage.getItem('user')
-  if (userData) {
-    user.value = JSON.parse(userData)
+// DI: src/views/DashboardView.vue - GANTI onMounted dengan:
+
+onMounted(async () => {
+  try {
+    // Get user data dengan error handling
+    const userData = localStorage.getItem('user')
+    console.log('Raw user data:', userData) // Debug
+    
+    if (userData && userData !== 'null' && userData !== 'undefined') {
+      try {
+        user.value = JSON.parse(userData)
+      } catch (parseError) {
+        console.error('Error parsing user data:', parseError)
+        // Clear corrupt data
+        localStorage.removeItem('user')
+        // Redirect to login
+        router.push('/login')
+        return
+      }
+    } else {
+      // No user data, redirect to login
+      router.push('/login')
+      return
+    }
+    
+    // Fetch data hanya jika user valid
+    await fetchSignals()
+    await fetchPendingCount()
+    
+  } catch (error) {
+    console.error('Error in mounted hook:', error)
   }
-  
-  // Fetch signals
-  fetchSignals()
-  fetchPendingCount()
 })
 </script>
