@@ -1,34 +1,39 @@
-// routes/signal.js
 import express from "express";
+import authenticate from "../middleware/auth.js";
+import { authorizeRoles } from "../middleware/role.js";
 import Signal from "../models/Signal.js";
-import { verifyToken } from "../middleware/auth.js";
 
+const express = require('express');
 const router = express.Router();
+const Signal = require('../models/Signal');
+const auth = require('../middleware/auth');
 
-// Semua sinyal yang sudah di-approve
-router.get("/approved", async (req, res) => {
+// 🔹 Semua user bisa lihat sinyal yang sudah di-ACC
+router.get("/", authenticate, async (req, res) => {
   try {
-    const signals = await Signal.findAll({
-      where: { status: "approved" },
-      order: [["created_at", "DESC"]],
-    });
+    const signals = await Signal.findAll({ where: { status: "approved" } });
     res.json(signals);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Gagal mengambil data sinyal" });
   }
 });
 
-// Sinyal milik user tertentu (kalau nanti mau dashboard pribadi)
-router.get("/my", verifyToken, async (req, res) => {
+// 🔹 Callmaker boleh menambahkan sinyal baru
+router.post("/", authenticate, authorizeRoles("callmaker", "admin"), async (req, res) => {
   try {
-    const signals = await Signal.findAll({
-      where: { created_by: req.user.id },
-      order: [["created_at", "DESC"]],
+    const { title, pair, entry, takeProfit, stopLoss } = req.body;
+    const newSignal = await Signal.create({
+      title,
+      pair,
+      entry,
+      takeProfit,
+      stopLoss,
+      status: "pending",
+      created_by: req.user.id,
     });
-    res.json(signals);
+    res.json({ message: "Sinyal berhasil ditambahkan", signal: newSignal });
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Gagal menambahkan sinyal" });
   }
 });
 
