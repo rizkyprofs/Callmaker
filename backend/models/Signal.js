@@ -1,4 +1,4 @@
-// models/Signal.js - BUAT FILE BARU
+// models/Signal.js - COMPLETE FIX
 import { DataTypes } from "sequelize";
 import sequelize from "../config/db.js";
 

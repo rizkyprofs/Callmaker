@@ -1,4 +1,4 @@
-// middleware/role.js - BUAT FILE BARU
+// middleware/role.js - FIX EXPORT
 export function authorizeRoles(roles) {
   return (req, res, next) => {
     if (!req.user) {
