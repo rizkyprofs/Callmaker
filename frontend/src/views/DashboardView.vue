@@ -14,9 +14,9 @@
         <button @click="handleLogout" class="logout-btn">Logout</button>
       </div>
 
-      <!-- Main Content (HANYA tampilkan jika user ada) -->
+      <!-- Main Content -->
       <div v-else-if="user" class="main-content">
-        <!-- Header dengan Role Info -->
+        <!-- Header -->
         <div class="dashboard-header">
           <div>
             <h1>Dashboard</h1>
@@ -39,8 +39,8 @@
             
             <!-- Admin Only Features -->
             <div v-if="user.role === 'admin'" class="admin-only">
-              <button @click="showPendingSignals" class="feature-btn pending-btn">
-                ⏳ Pending Signals ({{ pendingCount }})
+              <button @click="togglePendingFilter" class="feature-btn pending-btn">
+                ⏳ {{ showOnlyPending ? 'Show All' : 'Show Pending' }} ({{ pendingCount }})
               </button>
             </div>
           </div>
@@ -74,23 +74,30 @@
         <div class="signals-section">
           <div class="section-header">
             <h2>
-              <span v-if="user.role === 'user'">Trading Signals</span>
+              <span v-if="showOnlyPending">Pending Signals</span>
+              <span v-else-if="user.role === 'user'">Trading Signals</span>
               <span v-else-if="user.role === 'callmaker'">My Signals</span>
               <span v-else>All Signals</span>
+              <span class="signal-count">({{ filteredSignals.length }})</span>
             </h2>
-            <button @click="refreshData" class="refresh-btn">🔄 Refresh</button>
+            <div class="table-controls">
+              <button @click="refreshData" class="refresh-btn" :disabled="refreshing">
+                🔄 {{ refreshing ? 'Refreshing...' : 'Refresh' }}
+              </button>
+            </div>
           </div>
           
           <!-- Empty State -->
-          <div v-if="signals.length === 0" class="empty-state">
+          <div v-if="filteredSignals.length === 0" class="empty-state">
             <div class="empty-icon">📭</div>
             <h3>No Signals Found</h3>
-            <p v-if="user.role === 'user'">Check back later for new trading signals</p>
+            <p v-if="showOnlyPending">No pending signals requiring approval</p>
+            <p v-else-if="user.role === 'user'">Check back later for new trading signals</p>
             <p v-else-if="user.role === 'callmaker'">Create your first signal to get started</p>
             <p v-else>No signals in the system yet</p>
             
             <button 
-              v-if="user.role === 'callmaker'" 
+              v-if="user.role === 'callmaker' && !showOnlyPending" 
               @click="showCreateModal = true" 
               class="create-btn"
             >
@@ -113,11 +120,14 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="signal in signals" :key="signal.id" class="signal-row">
-                  <td class="coin-name">{{ signal.coin_name }}</td>
-                  <td>${{ signal.entry_price }}</td>
-                  <td>${{ signal.target_price }}</td>
-                  <td>${{ signal.stop_loss }}</td>
+                <tr v-for="signal in filteredSignals" :key="signal.id" class="signal-row">
+                  <td class="coin-name">
+                    <span class="coin-symbol">{{ getCoinSymbol(signal.coin_name) }}</span>
+                    {{ signal.coin_name }}
+                  </td>
+                  <td class="price-cell">${{ formatPrice(signal.entry_price) }}</td>
+                  <td class="price-cell">${{ formatPrice(signal.target_price) }}</td>
+                  <td class="price-cell">${{ formatPrice(signal.stop_loss) }}</td>
                   <td>
                     <span :class="['status-badge', signal.status]">
                       {{ signal.status }}
@@ -127,12 +137,29 @@
                   
                   <!-- Role-based Actions -->
                   <td v-if="user.role !== 'user'" class="actions">
-                    <!-- Admin can approve/reject -->
+                    <!-- Callmaker can edit/delete their pending signals -->
+                    <div v-if="user.role === 'callmaker' && signal.status === 'pending'" class="callmaker-actions">
+                      <button 
+                        @click="editSignal(signal)"
+                        class="action-btn edit-btn"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button 
+                        @click="deleteSignal(signal.id)"
+                        class="action-btn delete-btn"
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
+
+                    <!-- Admin can approve/reject pending signals -->
                     <div v-if="user.role === 'admin'" class="admin-actions">
                       <button 
                         v-if="signal.status === 'pending'"
                         @click="approveSignal(signal.id)"
                         class="action-btn approve-btn"
+                        :disabled="actionLoading"
                       >
                         ✅ Approve
                       </button>
@@ -140,8 +167,16 @@
                         v-if="signal.status === 'pending'"
                         @click="rejectSignal(signal.id)"
                         class="action-btn reject-btn"
+                        :disabled="actionLoading"
                       >
                         ❌ Reject
+                      </button>
+                      <button 
+                        @click="deleteSignal(signal.id)"
+                        class="action-btn delete-btn"
+                        :disabled="actionLoading"
+                      >
+                        🗑️ Delete
                       </button>
                     </div>
                   </td>
@@ -151,30 +186,90 @@
           </div>
         </div>
 
-        <!-- Create Signal Modal -->
-        <div v-if="showCreateModal" class="modal-overlay">
+        <!-- Create/Edit Signal Modal -->
+        <div v-if="showCreateModal || showEditModal" class="modal-overlay" @click.self="closeModal">
           <div class="modal">
-            <h3>Create New Signal</h3>
-            <form @submit.prevent="createSignal">
-              <input v-model="newSignal.coin_name" placeholder="Coin Name" required>
-              <input v-model="newSignal.entry_price" type="number" placeholder="Entry Price" required>
-              <input v-model="newSignal.target_price" type="number" placeholder="Target Price" required>
-              <input v-model="newSignal.stop_loss" type="number" placeholder="Stop Loss" required>
-              <textarea v-model="newSignal.note" placeholder="Notes (optional)"></textarea>
+            <h3>{{ showEditModal ? 'Edit Signal' : 'Create New Signal' }}</h3>
+            <form @submit.prevent="showEditModal ? updateSignal() : createSignal()">
+              <div class="form-group">
+                <label>Coin Name *</label>
+                <input 
+                  v-model="currentSignal.coin_name" 
+                  placeholder="e.g., BTC/USDT, ETH/USDT" 
+                  required
+                >
+              </div>
+              
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Entry Price *</label>
+                  <input 
+                    v-model="currentSignal.entry_price" 
+                    type="number" 
+                    step="0.0001"
+                    placeholder="0.00" 
+                    required
+                  >
+                </div>
+                <div class="form-group">
+                  <label>Target Price *</label>
+                  <input 
+                    v-model="currentSignal.target_price" 
+                    type="number" 
+                    step="0.0001"
+                    placeholder="0.00" 
+                    required
+                  >
+                </div>
+                <div class="form-group">
+                  <label>Stop Loss *</label>
+                  <input 
+                    v-model="currentSignal.stop_loss" 
+                    type="number" 
+                    step="0.0001"
+                    placeholder="0.00" 
+                    required
+                  >
+                </div>
+              </div>
+              
+              <div class="form-group">
+                <label>Notes (optional)</label>
+                <textarea 
+                  v-model="currentSignal.note" 
+                  placeholder="Additional notes about this signal..."
+                  rows="3"
+                ></textarea>
+              </div>
               
               <div class="modal-actions">
-                <button type="button" @click="showCreateModal = false" class="cancel-btn">Cancel</button>
-                <button type="submit" class="submit-btn">Create Signal</button>
+                <button 
+                  type="button" 
+                  @click="closeModal" 
+                  class="cancel-btn"
+                  :disabled="actionLoading"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  class="submit-btn"
+                  :disabled="actionLoading"
+                >
+                  {{ actionLoading ? 'Processing...' : (showEditModal ? 'Update Signal' : 'Create Signal') }}
+                </button>
               </div>
             </form>
           </div>
         </div>
-      </div>
 
-      <!-- Fallback jika user masih null (seharusnya tidak terjadi) -->
-      <div v-else class="error-state">
-        <p>❌ Failed to load user data</p>
-        <button @click="handleLogout" class="logout-btn">Go to Login</button>
+        <!-- Debug Info (Hanya di development) -->
+        <div v-if="isDevelopment" class="debug-info">
+          <h4>Debug Info:</h4>
+          <p>User Role: {{ user?.role }}</p>
+          <p>Signals Count: {{ signals.length }}</p>
+          <p>API Base: {{ apiBase }}</p>
+        </div>
       </div>
     </div>
   </div>
@@ -185,13 +280,25 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
+
+// State management
 const user = ref(null)
 const signals = ref([])
 const loading = ref(true)
 const error = ref(null)
+const refreshing = ref(false)
+const actionLoading = ref(false)
 const showCreateModal = ref(false)
+const showEditModal = ref(false)
+const showOnlyPending = ref(false)
 
-const newSignal = ref({
+// Development flag
+const isDevelopment = ref(process.env.NODE_ENV === 'development')
+const apiBase = ref('http://localhost:5000/api')
+
+// Signal forms
+const currentSignal = ref({
+  id: null,
   coin_name: '',
   entry_price: '',
   target_price: '',
@@ -199,7 +306,7 @@ const newSignal = ref({
   note: ''
 })
 
-// Computed values dengan null check
+// Computed values
 const pendingCount = computed(() => {
   return signals.value.filter(signal => signal.status === 'pending').length
 })
@@ -215,7 +322,19 @@ const mySignalsCount = computed(() => {
   return 0
 })
 
-// Format date
+const filteredSignals = computed(() => {
+  if (showOnlyPending.value) {
+    return signals.value.filter(signal => signal.status === 'pending')
+  }
+  
+  if (user.value?.role === 'callmaker') {
+    return signals.value.filter(signal => signal.created_by === user.value.id)
+  }
+  
+  return signals.value
+})
+
+// Utility functions
 const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('en-US', {
     year: 'numeric',
@@ -224,7 +343,28 @@ const formatDate = (dateString) => {
   })
 }
 
-// Fetch user data dengan better error handling
+const formatPrice = (price) => {
+  return parseFloat(price).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4
+  })
+}
+
+const getCoinSymbol = (coinName) => {
+  const symbols = {
+    'BTC': '₿',
+    'ETH': 'Ξ',
+    'ADA': 'A',
+    'SOL': 'S',
+    'XRP': 'X',
+    'ETFC': 'E'
+  }
+  
+  const coin = coinName.split('/')[0]
+  return symbols[coin] || '₿'
+}
+
+// API Calls dengan error handling yang lebih baik
 const fetchUserData = async () => {
   try {
     const token = localStorage.getItem('token')
@@ -232,7 +372,8 @@ const fetchUserData = async () => {
       throw new Error('No authentication token found')
     }
 
-    const response = await fetch('http://localhost:5000/api/auth/user', {
+    console.log('Fetching user data...')
+    const response = await fetch(`${apiBase.value}/auth/user`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -241,15 +382,15 @@ const fetchUserData = async () => {
     })
 
     if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
+      if (response.status === 401) {
         localStorage.removeItem('token')
-        localStorage.removeItem('user')
         throw new Error('Session expired. Please login again.')
       }
-      throw new Error(`Failed to fetch user data: ${response.status}`)
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
 
     const userData = await response.json()
+    console.log('User data fetched:', userData)
     return userData
   } catch (err) {
     console.error('Error fetching user data:', err)
@@ -257,13 +398,13 @@ const fetchUserData = async () => {
   }
 }
 
-// Fetch signals
 const fetchSignals = async () => {
   try {
     const token = localStorage.getItem('token')
     if (!token) return
 
-    const response = await fetch('http://localhost:5000/api/signals', {
+    console.log('Fetching signals...')
+    const response = await fetch(`${apiBase.value}/signals`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -273,43 +414,38 @@ const fetchSignals = async () => {
 
     if (response.ok) {
       const signalsData = await response.json()
+      console.log('Signals fetched:', signalsData.length)
       signals.value = signalsData
     } else {
-      console.warn('Failed to fetch signals:', response.status)
-      signals.value = []
+      console.error('Failed to fetch signals:', response.status)
+      throw new Error(`Failed to fetch signals: ${response.status}`)
     }
   } catch (err) {
     console.error('Error fetching signals:', err)
-    signals.value = []
+    throw err
   }
 }
 
-// Load all dashboard data
+// Main data loading
 const loadDashboardData = async () => {
   try {
     loading.value = true
     error.value = null
-    user.value = null // Reset user
 
-    // Check token first
     const token = localStorage.getItem('token')
     if (!token) {
       router.push('/login')
       return
     }
 
-    // Fetch user data
     const userData = await fetchUserData()
     user.value = userData
-
-    // Fetch signals
     await fetchSignals()
 
   } catch (err) {
     console.error('Error loading dashboard:', err)
     error.value = err.message
     
-    // Redirect to login if authentication failed
     if (err.message.includes('Session expired') || err.message.includes('token')) {
       setTimeout(() => {
         router.push('/login')
@@ -320,83 +456,190 @@ const loadDashboardData = async () => {
   }
 }
 
-// Role-based functions
+// Signal Actions
 const createSignal = async () => {
   try {
+    actionLoading.value = true
     const token = localStorage.getItem('token')
-    const response = await fetch('http://localhost:5000/api/signals', {
+    
+    const signalData = {
+      coin_name: currentSignal.value.coin_name,
+      entry_price: parseFloat(currentSignal.value.entry_price),
+      target_price: parseFloat(currentSignal.value.target_price),
+      stop_loss: parseFloat(currentSignal.value.stop_loss),
+      note: currentSignal.value.note || ''
+    }
+
+    console.log('Creating signal:', signalData)
+    
+    const response = await fetch(`${apiBase.value}/signals`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(newSignal.value)
+      body: JSON.stringify(signalData)
     })
 
-    if (response.ok) {
-      showCreateModal.value = false
-      newSignal.value = { coin_name: '', entry_price: '', target_price: '', stop_loss: '', note: '' }
-      await refreshData()
-      alert('Signal created successfully!')
-    } else {
-      alert('Failed to create signal')
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`HTTP ${response.status}: ${errorText}`)
     }
+
+    const result = await response.json()
+    console.log('Signal created:', result)
+    
+    showCreateModal.value = false
+    resetSignalForm()
+    await refreshData()
+    alert('Signal created successfully!')
+    
   } catch (err) {
     console.error('Error creating signal:', err)
-    alert('Failed to create signal')
+    alert(`Failed to create signal: ${err.message}`)
+  } finally {
+    actionLoading.value = false
   }
 }
 
 const approveSignal = async (signalId) => {
-  if (!confirm('Approve this signal?')) return
+  if (!confirm('Are you sure you want to approve this signal?')) return
   
-  try {
-    const token = localStorage.getItem('token')
-    const response = await fetch(`http://localhost:5000/api/signals/${signalId}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ status: 'approved' })
-    })
-
-    if (response.ok) {
-      await refreshData()
-      alert('Signal approved!')
-    }
-  } catch (err) {
-    console.error('Error approving signal:', err)
-    alert('Failed to approve signal')
-  }
+  await updateSignalStatus(signalId, 'approved')
 }
 
 const rejectSignal = async (signalId) => {
-  if (!confirm('Reject this signal?')) return
+  if (!confirm('Are you sure you want to reject this signal?')) return
   
+  await updateSignalStatus(signalId, 'rejected')
+}
+
+const updateSignalStatus = async (signalId, status) => {
   try {
+    actionLoading.value = true
     const token = localStorage.getItem('token')
-    const response = await fetch(`http://localhost:5000/api/signals/${signalId}/status`, {
+    
+    console.log(`Updating signal ${signalId} to ${status}`)
+    
+    const response = await fetch(`${apiBase.value}/signals/${signalId}/status`, {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ status: 'rejected' })
+      body: JSON.stringify({ status })
     })
 
-    if (response.ok) {
-      await refreshData()
-      alert('Signal rejected!')
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`HTTP ${response.status}: ${errorText}`)
     }
+
+    const result = await response.json()
+    console.log('Signal status updated:', result)
+    
+    await refreshData()
+    alert(`Signal ${status} successfully!`)
+    
   } catch (err) {
-    console.error('Error rejecting signal:', err)
-    alert('Failed to reject signal')
+    console.error('Error updating signal status:', err)
+    alert(`Failed to update signal: ${err.message}`)
+  } finally {
+    actionLoading.value = false
   }
 }
 
+const editSignal = (signal) => {
+  currentSignal.value = { ...signal }
+  showEditModal.value = true
+}
+
+const updateSignal = async () => {
+  try {
+    actionLoading.value = true
+    const token = localStorage.getItem('token')
+    
+    const signalData = {
+      coin_name: currentSignal.value.coin_name,
+      entry_price: parseFloat(currentSignal.value.entry_price),
+      target_price: parseFloat(currentSignal.value.target_price),
+      stop_loss: parseFloat(currentSignal.value.stop_loss),
+      note: currentSignal.value.note || ''
+    }
+
+    console.log('Updating signal:', currentSignal.value.id, signalData)
+    
+    const response = await fetch(`${apiBase.value}/signals/${currentSignal.value.id}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(signalData)
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`HTTP ${response.status}: ${errorText}`)
+    }
+
+    const result = await response.json()
+    console.log('Signal updated:', result)
+    
+    showEditModal.value = false
+    resetSignalForm()
+    await refreshData()
+    alert('Signal updated successfully!')
+    
+  } catch (err) {
+    console.error('Error updating signal:', err)
+    alert(`Failed to update signal: ${err.message}`)
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+const deleteSignal = async (signalId) => {
+  if (!confirm('Are you sure you want to delete this signal? This action cannot be undone.')) return
+  
+  try {
+    actionLoading.value = true
+    const token = localStorage.getItem('token')
+    
+    console.log('Deleting signal:', signalId)
+    
+    const response = await fetch(`${apiBase.value}/signals/${signalId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`HTTP ${response.status}: ${errorText}`)
+    }
+
+    await refreshData()
+    alert('Signal deleted successfully!')
+    
+  } catch (err) {
+    console.error('Error deleting signal:', err)
+    alert(`Failed to delete signal: ${err.message}`)
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+// UI Actions
 const refreshData = async () => {
-  await loadDashboardData()
+  refreshing.value = true
+  try {
+    await loadDashboardData()
+  } finally {
+    refreshing.value = false
+  }
 }
 
 const retryLoading = async () => {
@@ -409,15 +652,32 @@ const handleLogout = () => {
   router.push('/login')
 }
 
-const showPendingSignals = () => {
-  // Filter untuk show pending signals
-  signals.value = signals.value.filter(signal => signal.status === 'pending')
+const togglePendingFilter = () => {
+  showOnlyPending.value = !showOnlyPending.value
+}
+
+const closeModal = () => {
+  showCreateModal.value = false
+  showEditModal.value = false
+  resetSignalForm()
+}
+
+const resetSignalForm = () => {
+  currentSignal.value = {
+    id: null,
+    coin_name: '',
+    entry_price: '',
+    target_price: '',
+    stop_loss: '',
+    note: ''
+  }
 }
 
 onMounted(() => {
   loadDashboardData()
 })
 </script>
+
 <style scoped>
 .dashboard {
   min-height: 100vh;
@@ -1042,5 +1302,75 @@ onMounted(() => {
 
 .signals-table-container::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(45deg, #2980b9, #21618c);
+}
+
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+}
+
+.debug-info {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 20px;
+  font-size: 0.8em;
+  color: #6c757d;
+}
+
+.debug-info h4 {
+  margin: 0 0 10px 0;
+  color: #495057;
+}
+
+.coin-symbol {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  background: #3498db;
+  color: white;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 24px;
+  font-weight: bold;
+  margin-right: 8px;
+  font-size: 0.8em;
+}
+
+.signal-count {
+  font-size: 0.8em;
+  opacity: 0.7;
+  margin-left: 8px;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.table-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.callmaker-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 </style>
