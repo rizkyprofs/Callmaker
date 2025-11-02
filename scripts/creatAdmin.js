@@ -1,7 +1,7 @@
 // createAdmin.js
 import bcrypt from "bcryptjs";
-import sequelize from "./config/db.js";
-import User from "./models/User.js";
+import sequelize from "../backend/config/db.js";
+import User from "../backend/models/User.js";
 
 const createAdmin = async () => {
   try {

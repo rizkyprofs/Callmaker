@@ -1,7 +1,7 @@
 // backend/scripts/createDummyData.js
-import sequelize from '../config/db.js';
-import User from '../models/User.js';
-import Signal from '../models/Signal.js';
+import sequelize from '../backend/config/db.js';
+import User from '../backend/models/User.js';
+import Signal from '../backend/models/Signal.js';
 import bcrypt from 'bcryptjs';
 
 const createDummyData = async () => {
