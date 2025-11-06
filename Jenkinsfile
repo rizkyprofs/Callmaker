@@ -15,26 +15,26 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                sh 'npm install'
+                bat 'npm install'
             }
         }
 
         stage('Build Vue App') {
             steps {
-                sh 'npm run build'
+                bat 'npm run build'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t ${IMAGE_NAME} .'
+                bat 'docker build -t ${IMAGE_NAME} .'
             }
         }
 
         stage('Run Docker Container') {
             steps {
                 script {
-                    sh '''
+                    bat '''
                     docker rm -f ${CONTAINER_NAME} || true
                     docker run -d -p 8080:80 --name ${CONTAINER_NAME} ${IMAGE_NAME}
                     '''
