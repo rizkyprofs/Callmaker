@@ -1,35 +1,20 @@
 services:
-  db:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: callmaker_db
-      MYSQL_USER: callmaker
-      MYSQL_PASSWORD: callmaker
-    ports:
-      - "3306:3306"
-    healthcheck:
-      test: ["CMD-SHELL","mysqladmin ping -h localhost -u$$MYSQL_USER -p$$MYSQL_PASSWORD || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   backend:
     build:
       context: ./backend
     environment:
-      DB_HOST: db
+      DB_HOST: host.docker.internal   # <— kunci untuk akses MySQL di host Windows
+      DB_PORT: 3306                   # ganti jika XAMPP pakai port lain
       DB_USER: callmaker
+      DB_USERNAME: callmaker          # alias aman
       DB_PASS: callmaker
+      DB_PASSWORD: callmaker          # alias aman
       DB_NAME: callmaker_db
       DB_DIALECT: mysql
-      JWT_SECRET: change-me
       NODE_ENV: production
-    depends_on:
-      db:
-        condition: service_healthy
     ports:
       - "5000:5000"
+    restart: unless-stopped
 
   frontend:
     build:
@@ -37,4 +22,5 @@ services:
     depends_on:
       - backend
     ports:
-      - "5173:80"   # akses http://localhost:5173
+      - "5173:80"
+    restart: unless-stopped
