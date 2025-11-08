@@ -1,26 +1,64 @@
+version: '3.8'
 services:
-  backend:
-    build:
-      context: ./backend
-    environment:
-      DB_HOST: host.docker.internal   # <— kunci untuk akses MySQL di host Windows
-      DB_PORT: 3306                   # ganti jika XAMPP pakai port lain
-      DB_USER: callmaker
-      DB_USERNAME: callmaker          # alias aman
-      DB_PASS: callmaker
-      DB_PASSWORD: callmaker          # alias aman
-      DB_NAME: callmaker_db
-      DB_DIALECT: mysql
-      NODE_ENV: production
-    ports:
-      - "5000:5000"
-    restart: unless-stopped
-
   frontend:
-    build:
-      context: ./frontend
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:5000
     depends_on:
       - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  backend:
+    build: ./backend
     ports:
-      - "5173:80"
-    restart: unless-stopped
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=mysql
+      - DB_USER=callmaker_user
+      - DB_PASSWORD=callmaker_password
+      - DB_NAME=callmaker_db
+      - DB_PORT=3306
+      - JWT_SECRET=your_jwt_secret_here
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mysql:
+    image: mysql:8.0
+    container_name: callmaker_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: callmaker_db
+      MYSQL_USER: callmaker_user
+      MYSQL_PASSWORD: callmaker_password
+    ports:
+      - "3307:3306"  # Changed to 3307 to avoid conflict with local MySQL
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: 
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  mysql_data:
